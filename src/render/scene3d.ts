@@ -1,13 +1,13 @@
 /**
  * The whole machine, as one 3D model.
  *
- * Case, lid, rotor stack, reflector, keyboard, lampboard and plugboard are built
- * here as flat-shaded faces plus labels and hotspots. The renderer only has to
- * turn faces into triangles; the camera, the sorting and the hit testing are the
- * same for every backend, so a tap lands on the same key whether the pixels came
- * from WebGPU, WebGL or a 2D canvas.
+ * Case, lid, rotor stack, reflector, keyboard, lampboard, plugboard and the
+ * operator's note are built here as flat-shaded faces. Text is *geometry* too:
+ * every letter is a set of quads in the scene, so it foreshortens, sorts and is
+ * occluded exactly like the part it is printed on. There is no overlay layer and
+ * therefore nothing that can drift out of register with the machine.
  */
-import { parseColour } from './colour.js';
+import { glyphFor, GLYPH_ADVANCE } from './glyphs.js';
 import type { Point, Rgb, Triangle } from './surface.js';
 
 export interface Vec3 {
@@ -24,13 +24,12 @@ export interface OrbitCamera {
 	readonly target: Vec3;
 }
 
-/** Every colour the model uses. */
+/** Every colour the model uses. These are the object's materials, not the page's. */
 export interface Palette {
 	readonly caseSide: string;
 	readonly caseTop: string;
 	readonly deck: string;
 	readonly rotor: string;
-	/** One colour per rotor, cycled, so the wheels read as separate parts. */
 	readonly rotors: readonly string[];
 	readonly rotorRing: string;
 	readonly reflector: string;
@@ -44,14 +43,10 @@ export interface Palette {
 	readonly lampLit: string;
 	readonly socket: string;
 	readonly socketPlugged: string;
+	readonly paper: string;
+	readonly paperInk: string;
 }
 
-/**
- * The machine's own materials.
- *
- * These do not follow the page theme: a walnut case stays a walnut case in a
- * light room and a dark one. The interface changes; the object does not.
- */
 export const MACHINE_COLOURS: Palette = {
 	caseSide: '#22343f',
 	caseTop: '#2c4a5a',
@@ -70,26 +65,29 @@ export const MACHINE_COLOURS: Palette = {
 	lampLit: '#ffd166',
 	socket: '#b08d3a',
 	socketPlugged: '#f5b942',
+	paper: '#f4ecd8',
+	paperInk: '#3a3327',
 };
 
-export interface Label {
-	readonly at: Vec3;
-	readonly text: string;
+export interface Face {
+	readonly points: readonly Vec3[];
 	readonly colour: string;
-	/** Multiplier on the base text size. */
-	readonly scale: number;
-	readonly bold?: boolean;
+	readonly shade: number;
 }
 
 export type Hotspot =
 	| { readonly kind: 'rotor'; readonly index: number; readonly at: Vec3; readonly radius: number }
 	| { readonly kind: 'key'; readonly letter: string; readonly at: Vec3; readonly radius: number }
-	| { readonly kind: 'plug'; readonly letter: string; readonly at: Vec3; readonly radius: number };
+	| { readonly kind: 'plug'; readonly letter: string; readonly at: Vec3; readonly radius: number }
+	| { readonly kind: 'note'; readonly at: Vec3; readonly radius: number };
 
 export interface Scene3D {
 	readonly faces: readonly Face[];
-	readonly labels: readonly Label[];
 	readonly hotspots: readonly Hotspot[];
+	/** Centre and radius of everything in the scene, so the camera can fit it. */
+	readonly bounds: { readonly centre: Vec3; readonly radius: number };
+	/** Where the camera should look when the operator opens the plugboard. */
+	readonly plugboardFocus: { readonly target: Vec3; readonly distance: number };
 }
 
 export interface Machine3DInput {
@@ -100,10 +98,10 @@ export interface Machine3DInput {
 	readonly reflector: string;
 	readonly lidOpen: boolean;
 	readonly alphabet: string;
-	/** The letter currently lit on the lampboard, if any. */
 	readonly lit: string | null;
-	/** Letters joined to the plugboard. */
 	readonly plugged: readonly string[];
+	/** Lines written on the operator's note. */
+	readonly notes: readonly string[];
 }
 
 /** The three rows of a German Enigma keyboard, which was not QWERTY. */
@@ -112,20 +110,21 @@ export const KEY_ROWS = ['QWERTZUIO', 'ASDFGHJK', 'PYXCVBNML'] as const;
 const RADIUS = 46;
 const LENGTH = 26;
 const GAP = 8;
-const WALL = 6;
 const SEGMENTS = 20;
-
-export interface Face {
-	readonly points: readonly Vec3[];
-	readonly colour: string;
-	readonly shade: number;
-}
 
 const LIGHT = normalise({ x: -0.4, y: 0.85, z: 0.35 });
 
 function normalise(v: Vec3): Vec3 {
 	const length = Math.hypot(v.x, v.y, v.z) || 1;
 	return { x: v.x / length, y: v.y / length, z: v.z / length };
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+	return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+
+function add(a: Vec3, b: Vec3, scale = 1): Vec3 {
+	return { x: a.x + b.x * scale, y: a.y + b.y * scale, z: a.z + b.z * scale };
 }
 
 function shadeFor(normal: Vec3): number {
@@ -137,18 +136,53 @@ function quad(a: Vec3, b: Vec3, c: Vec3, d: Vec3, colour: string, shade: number)
 	return { points: [a, b, c, d], colour, shade };
 }
 
-/** A flat plate lying on a plane of constant z, facing the viewer. */
-function plate(centre: Vec3, width: number, height: number, colour: string, shade: number): Face {
-	const hw = width / 2;
-	const hh = height / 2;
-	return quad(
-		{ x: centre.x - hw, y: centre.y - hh, z: centre.z },
-		{ x: centre.x + hw, y: centre.y - hh, z: centre.z },
-		{ x: centre.x + hw, y: centre.y + hh, z: centre.z },
-		{ x: centre.x - hw, y: centre.y + hh, z: centre.z },
-		colour,
-		shade,
-	);
+/**
+ * Prints a line of text into the scene.
+ *
+ * `origin` is the bottom-left corner of the line, `right` and `up` are the axes of
+ * the surface it is printed on, and `height` is in world units.
+ */
+function addText(
+	faces: Face[],
+	text: string,
+	origin: Vec3,
+	right: Vec3,
+	up: Vec3,
+	height: number,
+	colour: string,
+	shade: number,
+	options: { weight?: number; spacing?: number } = {},
+): void {
+	const normal = normalise(cross(right, up));
+	const weight = height * (options.weight ?? 0.13);
+	const spacing = options.spacing ?? GLYPH_ADVANCE;
+	let cursor = 0;
+	for (const character of text) {
+		const glyph = glyphFor(character);
+		for (const line of glyph) {
+			for (let index = 1; index < line.length; index += 1) {
+				const from = line[index - 1];
+				const to = line[index];
+				if (!from || !to) continue;
+				const p0 = add(add(origin, right, (cursor + from[0] * 0.62) * height), up, (1 - from[1]) * height);
+				const p1 = add(add(origin, right, (cursor + to[0] * 0.62) * height), up, (1 - to[1]) * height);
+				const direction = normalise({ x: p1.x - p0.x, y: p1.y - p0.y, z: p1.z - p0.z });
+				const across = normalise(cross(normal, direction));
+				const half = weight / 2;
+				faces.push(
+					quad(
+						add(p0, across, -half),
+						add(p0, across, half),
+						add(p1, across, half),
+						add(p1, across, -half),
+						colour,
+						shade,
+					),
+				);
+			}
+		}
+		cursor += spacing;
+	}
 }
 
 /** A cylinder around the X axis: side quads plus two caps. */
@@ -185,8 +219,20 @@ function cylinder(centre: Vec3, radius: number, length: number, colour: string, 
 	return faces;
 }
 
-/** Rotor centres, left to right, and the extent of the machine. */
-function layout(input: Machine3DInput) {
+interface Layout {
+	centres: Vec3[];
+	reflector: Vec3;
+	minX: number;
+	maxX: number;
+	zFront: number;
+	zBack: number;
+	top: number;
+	bottom: number;
+	deckTop: { y: number; z: number };
+	deckBottom: { y: number; z: number };
+}
+
+function layout(input: Machine3DInput): Layout {
 	const count = Math.max(input.rotorCount, 1);
 	const step = LENGTH + GAP;
 	const span = step * (count - 1);
@@ -194,108 +240,90 @@ function layout(input: Machine3DInput) {
 	const reflector = { x: (centres[0]?.x ?? 0) - RADIUS * 0.72 - 14, y: 0, z: 0 };
 	const minX = reflector.x - RADIUS * 0.72 - 18;
 	const maxX = (centres[centres.length - 1]?.x ?? 0) + RADIUS + 18;
-	const depth = RADIUS * 2 + 24;
-	const zFront = depth / 2;
-	const zBack = -depth / 2;
+	const zFront = (RADIUS * 2 + 24) / 2;
+	const zBack = -zFront;
 	const top = RADIUS * 0.34;
 	const bottom = -RADIUS - 104;
-	// The keyboard deck slopes towards the operator, the way the real case did.
-	const deckTop = { y: -RADIUS * 0.18, z: zFront };
-	const deckBottom = { y: bottom + 52, z: zFront + 52 };
-	return { centres, reflector, minX, maxX, zFront, zBack, top, bottom, deckTop, deckBottom };
-}
-
-/** A point on the sloped keyboard deck: `t` runs from the top of the slope to the front edge. */
-function deckPoint(x: number, t: number, lift = 0): Vec3 {
-	const { deckTop, deckBottom } = LAYOUT_REF;
 	return {
-		x,
-		y: deckTop.y + (deckBottom.y - deckTop.y) * t,
-		z: deckTop.z + (deckBottom.z - deckTop.z) * t + lift,
+		centres,
+		reflector,
+		minX,
+		maxX,
+		zFront,
+		zBack,
+		top,
+		bottom,
+		deckTop: { y: -RADIUS * 0.18, z: zFront },
+		deckBottom: { y: bottom + 52, z: zFront + 52 },
 	};
 }
 
-/** A plate lying on the deck, given its centre in deck coordinates. */
-function deckPlate(x: number, t: number, width: number, depth: number, colour: string, shade: number): Face {
-	const halfW = width / 2;
-	const halfD = depth / 2;
-	return quad(
-		deckPoint(x - halfW, t - halfD, 0.6),
-		deckPoint(x + halfW, t - halfD, 0.6),
-		deckPoint(x + halfW, t + halfD, 0.6),
-		deckPoint(x - halfW, t + halfD, 0.6),
-		colour,
-		shade,
-	);
+/** Splits the sloped deck into a grid, so depth sorting stays local. */
+function deckTiles(
+	minX: number,
+	maxX: number,
+	top: { y: number; z: number },
+	bottom: { y: number; z: number },
+	colour: string,
+	columns = 6,
+	rows = 5,
+): Face[] {
+	const faces: Face[] = [];
+	const point = (x: number, t: number): Vec3 => ({
+		x,
+		y: top.y + (bottom.y - top.y) * t,
+		z: top.z + (bottom.z - top.z) * t,
+	});
+	for (let column = 0; column < columns; column += 1) {
+		const x0 = minX + ((maxX - minX) * column) / columns;
+		const x1 = minX + ((maxX - minX) * (column + 1)) / columns;
+		for (let row = 0; row < rows; row += 1) {
+			const t0 = row / rows;
+			const t1 = (row + 1) / rows;
+			faces.push(quad(point(x0, t0), point(x1, t0), point(x1, t1), point(x0, t1), colour, 0.96 - row * 0.02));
+		}
+	}
+	return faces;
 }
-
-/** Set by {@link buildScene3D} so {@link deckPoint} can place controls on the slope. */
-const LAYOUT_REF = {
-	deckTop: { y: 0, z: 0 },
-	deckBottom: { y: 0, z: 0 },
-};
 
 /** Builds the machine: every part, in one scene. */
 export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 	const faces: Face[] = [];
-	const labels: Label[] = [];
 	const hotspots: Hotspot[] = [];
-	const { centres, reflector, minX, maxX, zFront, zBack, top, bottom, deckTop, deckBottom } = layout(input);
-	LAYOUT_REF.deckTop = deckTop;
-	LAYOUT_REF.deckBottom = deckBottom;
+	const L = layout(input);
+	const { centres, reflector, minX, maxX, zFront, zBack, top, bottom, deckTop, deckBottom } = L;
+
+	/** A point on the sloped deck: `t` runs from the top of the slope to the front edge. */
+	const deckPoint = (x: number, t: number, lift = 0): Vec3 => ({
+		x,
+		y: deckTop.y + (deckBottom.y - deckTop.y) * t,
+		z: deckTop.z + (deckBottom.z - deckTop.z) * t + lift,
+	});
+
+	const deckPlate = (x: number, t: number, width: number, depth: number, colour: string, shade: number): Face => {
+		const halfW = width / 2;
+		const halfD = depth / 2;
+		return quad(
+			deckPoint(x - halfW, t - halfD, 0.6),
+			deckPoint(x + halfW, t - halfD, 0.6),
+			deckPoint(x + halfW, t + halfD, 0.6),
+			deckPoint(x - halfW, t + halfD, 0.6),
+			colour,
+			shade,
+		);
+	};
 
 	// Case: floor, back wall, two side walls, the sloped deck and its front skirt.
 	faces.push(
-		quad(
-			{ x: minX, y: bottom, z: zBack },
-			{ x: maxX, y: bottom, z: zBack },
-			{ x: maxX, y: bottom, z: deckBottom.z },
-			{ x: minX, y: bottom, z: deckBottom.z },
-			palette.caseSide,
-			0.55,
-		),
-		quad(
-			{ x: minX, y: bottom, z: zBack },
-			{ x: maxX, y: bottom, z: zBack },
-			{ x: maxX, y: top, z: zBack },
-			{ x: minX, y: top, z: zBack },
-			palette.caseSide,
-			0.6,
-		),
-		quad(
-			{ x: minX, y: bottom, z: zBack },
-			{ x: minX, y: bottom, z: deckBottom.z },
-			{ x: minX, y: deckTop.y, z: deckTop.z },
-			{ x: minX, y: top, z: zBack },
-			palette.caseTop,
-			0.86,
-		),
-		quad(
-			{ x: maxX, y: bottom, z: zBack },
-			{ x: maxX, y: bottom, z: deckBottom.z },
-			{ x: maxX, y: deckTop.y, z: deckTop.z },
-			{ x: maxX, y: top, z: zBack },
-			palette.caseTop,
-			0.86,
-		),
-		// The deck itself, catching the light.
-		quad(
-			{ x: minX, y: deckTop.y, z: deckTop.z },
-			{ x: maxX, y: deckTop.y, z: deckTop.z },
-			{ x: maxX, y: deckBottom.y, z: deckBottom.z },
-			{ x: minX, y: deckBottom.y, z: deckBottom.z },
-			palette.deck,
-			0.96,
-		),
-		// Front skirt below the deck edge.
-		quad(
-			{ x: minX, y: bottom, z: deckBottom.z },
-			{ x: maxX, y: bottom, z: deckBottom.z },
-			{ x: maxX, y: deckBottom.y, z: deckBottom.z },
-			{ x: minX, y: deckBottom.y, z: deckBottom.z },
-			palette.caseSide,
-			0.66,
-		),
+		quad({ x: minX, y: bottom, z: zBack }, { x: maxX, y: bottom, z: zBack }, { x: maxX, y: bottom, z: deckBottom.z }, { x: minX, y: bottom, z: deckBottom.z }, palette.caseSide, 0.55),
+		quad({ x: minX, y: bottom, z: zBack }, { x: maxX, y: bottom, z: zBack }, { x: maxX, y: top, z: zBack }, { x: minX, y: top, z: zBack }, palette.caseSide, 0.6),
+		quad({ x: minX, y: bottom, z: zBack }, { x: minX, y: bottom, z: deckBottom.z }, { x: minX, y: deckTop.y, z: deckTop.z }, { x: minX, y: top, z: zBack }, palette.caseTop, 0.8),
+		quad({ x: maxX, y: bottom, z: zBack }, { x: maxX, y: bottom, z: deckBottom.z }, { x: maxX, y: deckTop.y, z: deckTop.z }, { x: maxX, y: top, z: zBack }, palette.caseTop, 0.8),
+		// The deck is tiled, not one quad. A painter's algorithm sorts by a face's
+		// average depth, and one enormous quad averages to the middle of the
+		// machine — so it would paint over the keys printed on its far half.
+		...deckTiles(minX, maxX, deckTop, deckBottom, palette.deck),
+		quad({ x: minX, y: bottom, z: deckBottom.z }, { x: maxX, y: bottom, z: deckBottom.z }, { x: maxX, y: deckBottom.y, z: deckBottom.z }, { x: minX, y: deckBottom.y, z: deckBottom.z }, palette.caseSide, 0.66),
 	);
 
 	if (!input.lidOpen) {
@@ -311,27 +339,31 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 		);
 	}
 
-	// Reflector, then the rotors standing proud of the case.
+	// Reflector, then the rotors.
 	faces.push(...cylinder(reflector, RADIUS * 0.72, 10, palette.reflector, palette.reflector));
-	labels.push({ at: { x: reflector.x, y: RADIUS * 0.86, z: 0 }, text: input.reflector, colour: palette.ink, scale: 0.7 });
+	addText(faces, input.reflector.replace('UKW-', ''), { x: reflector.x - 12, y: RADIUS * 0.8, z: 12 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, 9, palette.ink, 1);
 
 	centres.forEach((centre, index) => {
 		const band = RADIUS * 1.04;
 		const body = palette.rotors[index % Math.max(palette.rotors.length, 1)] ?? palette.rotor;
 		faces.push(...cylinder(centre, RADIUS, LENGTH, body, palette.rotorRing));
 		faces.push(...cylinder(centre, band, Math.min(LENGTH * 0.55, 18), palette.rotorRing, palette.rotorRing));
-		labels.push({
-			at: { x: centre.x, y: band * 0.94, z: 0 },
-			text: input.windows[index] ?? '',
-			colour: palette.key,
-			scale: 1.5,
-			bold: true,
-		});
-		labels.push({
-			at: { x: centre.x, y: -RADIUS * 0.1, z: zFront + 0.6 },
-			text: `${input.ids[index] ?? ''}·${input.rings[index] ?? ''}`,
-			colour: palette.accent,
-			scale: 0.72,
+		// The window: printed on the crown of the wheel, facing up and forward.
+		const window = input.windows[index] ?? '';
+		addText(
+			faces,
+			window,
+			{ x: centre.x - 6, y: band + 1, z: 6 },
+			{ x: 1, y: 0, z: 0 },
+			{ x: 0, y: 0, z: -1 },
+			16,
+			palette.key,
+			1,
+			{ weight: 0.16 },
+		);
+		const caption = `${input.ids[index] ?? ''}·${input.rings[index] ?? ''}`;
+		addText(faces, caption, { x: centre.x - caption.length * 3, y: RADIUS * 0.1, z: zFront + 1 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, 6.5, palette.accent, 1, {
+			weight: 0.18,
 		});
 		hotspots.push({ kind: 'rotor', index, at: { x: centre.x, y: 0, z: 0 }, radius: RADIUS });
 	});
@@ -340,29 +372,41 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 	const letters = [...input.alphabet];
 	const centreX = (minX + maxX) / 2;
 	const columnStep = Math.min(19, (maxX - minX - 30) / 9.5);
-	const rowsOf = (rows: readonly string[]) => rows.map((row) => [...row].filter((letter) => letters.includes(letter)));
+	const rowsOf = KEY_ROWS.map((row) => [...row].filter((letter) => letters.includes(letter)));
 
-	rowsOf(KEY_ROWS).forEach((row, rowIndex) => {
+	rowsOf.forEach((row, rowIndex) => {
 		row.forEach((letter, columnIndex) => {
 			const offset = (columnIndex - (row.length - 1) / 2) * columnStep;
 			const x = centreX + offset;
 			const t = 0.36 + rowIndex * 0.12;
 			const lit = input.lit === letter;
+			if (lit) faces.push(deckPlate(x, t, columnStep * 0.98, 0.1, palette.keyLit, 1));
 			faces.push(deckPlate(x, t, columnStep * 0.78, 0.075, lit ? palette.keyLit : palette.key, 1));
-			const at = deckPoint(x, t, 0.9);
-			labels.push({ at, text: letter, colour: lit ? palette.keyInk : palette.keyInk, scale: 0.82, bold: true });
+			const keyText = columnStep * 0.38;
+			const centre = deckPoint(x, t, 9);
+			addText(
+				faces,
+				letter,
+				{ x: centre.x - keyText * 0.31, y: centre.y - keyText * 0.5, z: centre.z },
+				{ x: 1, y: 0, z: 0 },
+				{ x: 0, y: 1, z: 0 },
+				keyText,
+				palette.keyInk,
+				1,
+				{ weight: 0.17 },
+			);
 			hotspots.push({ kind: 'key', letter, at: deckPoint(x, t, 0.6), radius: columnStep * 0.5 });
 		});
 	});
 
-	rowsOf(KEY_ROWS).forEach((row, rowIndex) => {
+	rowsOf.forEach((row, rowIndex) => {
 		row.forEach((letter, columnIndex) => {
 			const offset = (columnIndex - (row.length - 1) / 2) * columnStep;
 			const x = centreX + offset;
 			const t = 0.07 + rowIndex * 0.065;
 			const lit = input.lit === letter;
+			if (lit) faces.push(deckPlate(x, t, columnStep * 0.8, 0.08, palette.lampLit, 1));
 			faces.push(deckPlate(x, t, columnStep * 0.42, 0.04, lit ? palette.lampLit : palette.lamp, 1));
-			if (lit) labels.push({ at: deckPoint(x, t, 0.9), text: letter, colour: palette.keyInk, scale: 0.55, bold: true });
 		});
 	});
 
@@ -371,14 +415,77 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 		const column = index % columns;
 		const row = Math.floor(index / columns);
 		const x = centreX + (column - (columns - 1) / 2) * columnStep * 0.92;
-		const t = 0.78 + row * 0.11;
+		const t = 0.78 + row * 0.1;
 		const plugged = input.plugged.includes(letter);
 		faces.push(deckPlate(x, t, columnStep * 0.4, 0.055, plugged ? palette.socketPlugged : palette.socket, 1));
-		labels.push({ at: deckPoint(x, t, 0.9), text: letter, colour: palette.keyInk, scale: 0.48, bold: plugged });
+		const plugText = columnStep * 0.22;
+		const socket = deckPoint(x, t, 3.5);
+		addText(
+			faces,
+			letter,
+			{ x: socket.x - plugText * 0.31, y: socket.y - plugText * 0.5, z: socket.z },
+			{ x: 1, y: 0, z: 0 },
+			{ x: 0, y: 1, z: 0 },
+			plugText,
+			palette.keyInk,
+			1,
+			{ weight: 0.24 },
+		);
 		hotspots.push({ kind: 'plug', letter, at: deckPoint(x, t, 0.6), radius: columnStep * 0.38 });
 	});
 
-	return { faces, labels, hotspots };
+	// The operator's note, on a card beside the machine, written on by hand.
+	const noteX = maxX + 12;
+	const noteY = bottom + 66;
+	const noteZ = 26;
+	const noteW = 56;
+	const noteH = 36;
+	faces.push(quad({ x: noteX, y: noteY, z: noteZ }, { x: noteX + noteW, y: noteY, z: noteZ }, { x: noteX + noteW, y: noteY + noteH, z: noteZ }, { x: noteX, y: noteY + noteH, z: noteZ }, palette.paper, 0.98));
+	input.notes.slice(0, 4).forEach((line, index) => {
+		addText(
+			faces,
+			line.slice(0, 12),
+			{ x: noteX + 3, y: noteY + noteH - 8 - index * 8.5, z: noteZ + 0.5 },
+			{ x: 1, y: 0, z: 0 },
+			{ x: 0, y: 1, z: 0 },
+			5,
+			palette.paperInk,
+			1,
+			{ weight: 0.2 },
+		);
+	});
+	hotspots.push({ kind: 'note', at: { x: noteX + noteW / 2, y: noteY + noteH / 2, z: noteZ }, radius: 30 });
+
+	return {
+		faces,
+		hotspots,
+		bounds: boundsOf(faces),
+		plugboardFocus: { target: { x: centreX, y: deckBottom.y + 6, z: deckBottom.z - 20 }, distance: 190 },
+	};
+}
+
+/** Centre and radius of every point in the scene. */
+function boundsOf(faces: readonly Face[]): { centre: Vec3; radius: number } {
+	let minX = Infinity;
+	let minY = Infinity;
+	let minZ = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	let maxZ = -Infinity;
+	for (const face of faces) {
+		for (const point of face.points) {
+			minX = Math.min(minX, point.x);
+			minY = Math.min(minY, point.y);
+			minZ = Math.min(minZ, point.z);
+			maxX = Math.max(maxX, point.x);
+			maxY = Math.max(maxY, point.y);
+			maxZ = Math.max(maxZ, point.z);
+		}
+	}
+	if (!Number.isFinite(minX)) return { centre: { x: 0, y: 0, z: 0 }, radius: 100 };
+	const centre = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 };
+	const radius = Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) / 2;
+	return { centre, radius };
 }
 
 /** Projects one point. Larger `depth` is further from the camera. */
@@ -408,8 +515,10 @@ export function project3d(point: Vec3, camera: OrbitCamera, width: number, heigh
 export function renderTriangles(faces: readonly Face[], camera: OrbitCamera, width: number, height: number): Triangle[] {
 	const prepared = faces.map((face) => {
 		const projected = face.points.map((point) => project3d(point, camera, width, height));
-		const depth = projected.reduce((sum, point) => sum + point.depth, 0) / Math.max(projected.length, 1);
-		const rgb = parseColour(face.colour) ?? ([0.5, 0.5, 0.5] as Rgb);
+		let depth = 0;
+		for (const point of projected) depth += point.depth;
+		depth /= Math.max(projected.length, 1);
+		const rgb = hexToRgb(face.colour);
 		const colour: Rgb = [rgb[0] * face.shade, rgb[1] * face.shade, rgb[2] * face.shade];
 		return { projected, depth, colour };
 	});
@@ -419,64 +528,37 @@ export function renderTriangles(faces: readonly Face[], camera: OrbitCamera, wid
 	for (const { projected, colour } of prepared) {
 		const points: Point[] = projected.map((point) => ({ x: point.x, y: point.y }));
 		for (let index = 1; index + 1 < points.length; index += 1) {
-			triangles.push({
-				a: points[0] as Point,
-				b: points[index] as Point,
-				c: points[index + 1] as Point,
-				colour,
-			});
+			triangles.push({ a: points[0] as Point, b: points[index] as Point, c: points[index + 1] as Point, colour });
 		}
 	}
 	return triangles;
 }
 
-/** Draws the labels on a 2D overlay, so text stays crisp on every backend. */
-export function paintLabels(
-	context: CanvasRenderingContext2D,
-	scene: Scene3D,
-	camera: OrbitCamera,
-	width: number,
-	height: number,
-	ratio: number,
-): void {
-	context.setTransform(ratio, 0, 0, ratio, 0, 0);
-	context.clearRect(0, 0, width, height);
-	context.textAlign = 'center';
-	context.textBaseline = 'middle';
-
-	const items = scene.labels
-		.map((label) => {
-			const projected = project3d(label.at, camera, width, height);
-			return { label, projected };
-		})
-		.sort((a, b) => b.projected.depth - a.projected.depth);
-
-	for (const { label, projected } of items) {
-		const size = Math.max(6, Math.min(64, projected.scale * 6 * label.scale));
-		if (size < 7) continue;
-		const colour = parseColour(label.colour);
-		if (!colour) continue;
-		context.font = `${label.bold ? 700 : 500} ${size}px ui-monospace, "SF Mono", Menlo, monospace`;
-		context.fillStyle = `rgb(${colour.map((channel) => Math.round(channel * 255)).join(' ')})`;
-		context.fillText(label.text, projected.x, projected.y);
-	}
-}
-
 /** What the pointer landed on, if anything. Nearest wins. */
-export function hitTest3d(
-	point: Point,
-	scene: Scene3D,
-	camera: OrbitCamera,
-	width: number,
-	height: number,
-): Hotspot | null {
+export function hitTest3d(point: Point, scene: Scene3D, camera: OrbitCamera, width: number, height: number): Hotspot | null {
 	let best: { hotspot: Hotspot; depth: number } | null = null;
 	for (const hotspot of scene.hotspots) {
 		const projected = project3d(hotspot.at, camera, width, height);
-		const radius = Math.max(hotspot.radius * projected.scale, 6);
+		const radius = Math.max(hotspot.radius * projected.scale, 7);
 		if (Math.hypot(point.x - projected.x, point.y - projected.y) > radius) continue;
 		if (!best || projected.depth < best.depth) best = { hotspot, depth: projected.depth };
 	}
 	return best ? best.hotspot : null;
 }
 
+function hexToRgb(value: string): Rgb {
+	const text = value.trim();
+	const hex = text.startsWith('#') ? text.slice(1) : text;
+	if (hex.length === 3) {
+		const [r, g, b] = [...hex].map((char) => Number.parseInt(char + char, 16) / 255);
+		return [r ?? 0.5, g ?? 0.5, b ?? 0.5];
+	}
+	if (hex.length === 6) {
+		return [
+			Number.parseInt(hex.slice(0, 2), 16) / 255,
+			Number.parseInt(hex.slice(2, 4), 16) / 255,
+			Number.parseInt(hex.slice(4, 6), 16) / 255,
+		];
+	}
+	return [0.5, 0.5, 0.5];
+}
