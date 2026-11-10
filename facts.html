@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Enigma facts — twelve things the machine did that surprise people</title>
+		<meta
+			name="description"
+			content="Twelve Enigma facts: no letter ever encoded to itself, thirteen plugboard cables are weaker than ten, the middle rotor double-steps, and the key space was never the problem."
+		/>
+		<meta name="color-scheme" content="dark light" />
+		<meta name="theme-color" content="#0b0f14" />
+		<link rel="canonical" href="https://indpriyanshuraj-bot.github.io/enigma-lab/facts.html" />
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<link rel="manifest" href="./manifest.webmanifest" />
+		<meta property="og:type" content="article" />
+		<meta property="og:title" content="Twelve Enigma facts" />
+		<meta property="og:description" content="The double step, the self-encryption that never was, and why more cables meant fewer keys." />
+		<link rel="stylesheet" href="/src/styles.css" />
+		<script>
+			(function () {
+				try {
+					var stored = JSON.parse(localStorage.getItem('enigma-lab:prefs') || 'null');
+					var theme = stored && stored.theme;
+					if (!theme) theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+					document.documentElement.dataset.theme = theme;
+				} catch (error) {
+					document.documentElement.dataset.theme = 'dark';
+				}
+			})();
+		</script>
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "Article",
+				"headline": "Twelve Enigma facts",
+				"about": { "@type": "Thing", "name": "Enigma machine" },
+				"url": "https://indpriyanshuraj-bot.github.io/enigma-lab/facts.html"
+			}
+		</script>
+	</head>
+	<body>
+		<div class="page">
+			<header class="page__head">
+				<h1>Fun facts</h1>
+				<nav class="nav" aria-label="Sections">
+					<a href="./">Machine</a>
+					<a href="./about.html">About</a>
+					<a href="./facts.html" aria-current="page">Fun facts</a>
+				</nav>
+			</header>
+
+			<main>
+				<p class="hint" style="margin-bottom: 1rem">
+					Each of these can be checked against the machine on the front page — most of them in under a minute.
+				</p>
+
+				<ol class="facts">
+					<li>
+						<div>
+							<h3>A letter could never encode to itself</h3>
+							<p>
+								The reflector guarantees it: the signal always returns by a different wire. Type <code>AAAA</code> with the
+								default machine and you will get four letters, none of them A. Codebreakers used that as a first filter, and
+								it is why a guessed word could be placed against a ciphertext at all.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>The middle rotor double-steps</h3>
+							<p>
+								Set the rotors to <code>ADU</code> and press three times: the window runs <code>ADV</code>,
+								<code>AEW</code>, <code>BFX</code>. The middle rotor carried the left-hand rotor, then stepped again on its
+								own notch. Nobody designed it that way on purpose and every simulation has to reproduce it.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>More plugboard cables meant fewer keys</h3>
+							<p>
+								Ten cables give 150,738,274,937,250 arrangements; thirteen give fewer. The count peaks at ten or eleven and
+								then falls, because each extra cable also removes choices. The key-space panel lets you drag a slider and
+								watch it happen.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>The key space was never the weak point</h3>
+							<p>
+								A Wehrmacht Enigma I had about 2.79 × 10<sup>24</sup> keys — 81 bits, beyond exhaustive search by any machine
+								of the era. It was broken through procedure: predictable keys, lazy operators, and a repeated indicator.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>The message key was sent twice</h3>
+							<p>
+								The operator set the rotors to the daily key, encrypted a three-letter message key twice, and sent those six
+								letters as a header. The same letters, six positions apart, under the same start — a gift to anyone with
+								enough intercepts. The signal panel on the front page shows the six letters.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>The Poles broke it first, in 1932</h3>
+							<p>
+								Marian Rejewski reconstructed the military rotor wiring from intercepted indicators using group theory,
+								before the war. Jerzy Różycki's clock method and Henryk Zygalski's perforated sheets followed. Britain got
+								the results at a meeting outside Warsaw in July 1939, weeks before the invasion.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>The naval rotors had two notches</h3>
+							<p>
+								Rotors VI, VII and VIII turn over at both Z and M, so they advance the neighbouring rotor twice as often as
+								an army rotor. It made the naval traffic harder in a way that has nothing to do with key length.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>M4 added a rotor that never turns</h3>
+							<p>
+								From February 1942 the U-boats used a fourth, thin rotor (Beta or Gamma) in the leftmost slot. It has a ring
+								and wiring but no notch, so it stays still while the other three work. It multiplied the key space and
+								plunged Bletchley Park into a blackout for most of that year.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>Operators had a mnemonic for the notches</h3>
+							<p>
+								The letters visible just before turnover — Q, E, V, J, Z for rotors I to V — were remembered as
+								<em>Royal Flags Wave Kings Above</em>. The offset by one letter is because the rotors step before the lamp
+								lights.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>It was a commercial product first</h3>
+							<p>
+								Arthur Scherbius patented a cipher machine in 1918 and sold Enigma machines to businesses and railways before
+								any army bought one. The military version added the plugboard, which is where most of the key space comes
+								from.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>Ring settings and window letters are not the same thing</h3>
+							<p>
+								The ring setting rotates the wiring against the alphabet ring; the window position rotates the whole rotor.
+								Change one and the notch moves relative to the letters you see. Two operators with the same window letters
+								and different ring settings are running different ciphers.
+							</p>
+						</div>
+					</li>
+					<li>
+						<div>
+							<h3>You can build a machine that never existed</h3>
+							<p>
+								The builder goes up to a hundred rotors with your own notches, your own alphabet and seeded wiring. The key
+								space becomes absurd — and it still does not help, because the weakness was never the arithmetic.
+							</p>
+						</div>
+					</li>
+				</ol>
+			</main>
+
+			<footer class="footer">
+				<p><a href="./">Try them on the machine</a> · <a href="./about.html">How it works</a></p>
+				<p>MIT licensed. Built by Priyanshu Raj with Sarvam Agents.</p>
+			</footer>
+		</div>
+	</body>
+</html>

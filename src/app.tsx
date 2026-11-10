@@ -1,40 +1,33 @@
 import { indexToSymbol, PRESETS, transmit, VERSION } from '@enigma-lab/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
+import { FormMode } from './modes/form.js';
+import { ThreeDMode } from './modes/three-d-mode.js';
 import { detectRenderer } from './render/webgpu.js';
-import { machineGeometry } from './render/theme.js';
-import { MachineStage } from './render/machine-stage.js';
-import {
-	CUSTOM_PRESET_ID,
-	encodeHash,
-	keyspaceFor,
-	loadState,
-	machineFor,
-	nextLetter,
-	rollKey,
-	saveState,
-	stateForPreset,
-	type LabState,
-} from './state/store.js';
-import { Builder, History, KeyspaceExplorer, SignalPanel } from './ui/panels.js';
-import { Controls } from './ui/controls.js';
-import { Keyboard } from './ui/keyboard.js';
+import { CUSTOM_PRESET_ID, encodeHash, keyspaceFor, loadState, machineFor, nextLetter, rollKey, saveState, type LabState } from './state/store.js';
+import { applyTheme, loadPrefs, savePrefs, type Mode, type Prefs } from './state/prefs.js';
+import { Settings } from './ui/settings.js';
 
 const PRESET_IDS = [...Object.keys(PRESETS), CUSTOM_PRESET_ID];
 
+/** Rotor order, rings and start positions, in the shape the procedures want. */
+function dailyKey(state: LabState) {
+	return { rotorOrder: [...state.rotorOrder], rings: state.rings, positions: state.positions };
+}
+
 export function App() {
 	const [state, setState] = useState<LabState>(() => loadState());
+	const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
 	const [renderer, setRenderer] = useState<'webgpu' | 'svg'>('svg');
 	const [rendererNote, setRendererNote] = useState('detecting');
-	const [theme, setTheme] = useState<'dark' | 'light'>(() =>
-		globalThis.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
-	);
 	const [lit, setLit] = useState<string | null>(null);
 	const [selected, setSelected] = useState<number | null>(null);
 	const [lidOpen, setLidOpen] = useState(true);
 	const [messageKey, setMessageKey] = useState('QWE');
+	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [installable, setInstallable] = useState<{ prompt: () => Promise<void> } | null>(null);
 
-	/** One machine per config: encrypting the input leaves it in a known state. */
+	const mode: Mode = prefs.mode;
+
 	const run = useMemo(() => {
 		const machine = machineFor(state);
 		const output = machine.encrypt(state.input);
@@ -46,11 +39,7 @@ export function App() {
 		}));
 		const signal = (() => {
 			try {
-				const sender = machineFor(state);
-				const key = messageKey.padEnd(3, 'A').slice(0, 3);
-				const sent = transmit(sender, state.input, { rotorOrder: state.rotorOrder, rings: state.rings, positions: state.positions }, key, {
-					reset: true,
-				});
+				const sent = transmit(machineFor(state), state.input, dailyKey(state), messageKey.padEnd(3, 'A').slice(0, 3));
 				return { indicator: sent.indicator, body: sent.body };
 			} catch {
 				return { indicator: '', body: '' };
@@ -68,16 +57,17 @@ export function App() {
 	}, [state]);
 
 	useEffect(() => {
-		document.documentElement.dataset.theme = theme;
-	}, [theme]);
+		savePrefs(prefs);
+		applyTheme(prefs.theme);
+		document.documentElement.dataset.motion = prefs.motion ? 'on' : 'off';
+	}, [prefs]);
 
 	useEffect(() => {
 		void detectRenderer().then((report) => setRendererNote(report.reason));
 	}, []);
 
 	useEffect(() => {
-		if (!('serviceWorker' in navigator)) return;
-		if (!globalThis.isSecureContext) return;
+		if (!('serviceWorker' in navigator) || !globalThis.isSecureContext) return;
 		navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {
 			// Offline support is a bonus, never a requirement.
 		});
@@ -105,6 +95,8 @@ export function App() {
 		const onKeyDown = (event: KeyboardEvent) => {
 			const target = event.target as HTMLElement | null;
 			if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+			// Letters still reach the machine while the 3D stage has focus; only the
+			// stage's own arrow and zoom keys are handled there.
 			if (event.metaKey || event.ctrlKey || event.altKey) return;
 			const letter = event.key.toUpperCase();
 			if (/^[A-Z]$/.test(letter)) {
@@ -134,150 +126,97 @@ export function App() {
 		setState({ ...state, positions: chars.join('') });
 	};
 
-	const swapRotor = (index: number, direction: -1 | 1) => {
-		const target = index + direction;
-		if (target < 0 || target >= state.rotorOrder.length) return;
-		const order = [...state.rotorOrder];
-		const [moved] = order.splice(index, 1);
-		if (!moved) return;
-		order.splice(target, 0, moved);
-		setSelected(target);
-		setState({ ...state, rotorOrder: order });
+	const shared = {
+		state,
+		onChange: setState,
+		run,
+		breakdown,
+		selected,
+		onSelectRotor: stepRotor,
+		lidOpen,
+		onToggleLid: () => setLidOpen(!lidOpen),
+		lit,
+		onPress: press,
+		onBackspace: backspace,
 	};
-
-	const rotorRow = selected === null ? null : (
-		<div class="rotor-actions" role="group" aria-label={`Rotor ${selected + 1}`}>
-			<span>
-				Rotor {selected + 1}: {run.rotors[selected]?.id ?? ''}
-			</span>
-			<button type="button" class="button button--ghost" onClick={() => stepRotor(selected)}>
-				Step
-			</button>
-			<button type="button" class="button button--ghost" onClick={() => swapRotor(selected, -1)} disabled={selected === 0}>
-				←
-			</button>
-			<button
-				type="button"
-				class="button button--ghost"
-				onClick={() => swapRotor(selected, 1)}
-				disabled={selected === state.rotorOrder.length - 1}
-			>
-				→
-			</button>
-			<button type="button" class="button button--ghost" onClick={() => setSelected(null)}>
-				Done
-			</button>
-		</div>
-	);
 
 	return (
 		<div class="app">
+			<a class="skip-link" href="#main">
+				Skip to the machine
+			</a>
+
 			<header class="masthead">
-				<div>
-					<h1>Enigma Lab</h1>
-					<p class="masthead__sub">
-						A working machine, not a picture of one. Every key press steps the rotors, crosses the reflector and comes back
-						through the plugboard.
-					</p>
+				<div class="masthead__brand">
+					<span class="masthead__mark" aria-hidden="true">
+						<svg viewBox="0 0 32 32" width="28" height="28">
+							<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2" />
+							<circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6" />
+							<circle cx="16" cy="16" r="2" fill="currentColor" />
+							<path d="M16 5v3M16 24v3M5 16h3M24 16h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+						</svg>
+					</span>
+					<div>
+						<h1>Enigma Lab</h1>
+						<p class="masthead__sub">A working machine, not a picture of one.</p>
+					</div>
 				</div>
+
+				<nav class="nav" aria-label="Sections">
+					<a href="./" aria-current="page">
+						Machine
+					</a>
+					<a href="./about.html">About</a>
+					<a href="./facts.html">Fun facts</a>
+				</nav>
+
 				<div class="masthead__actions">
+					<div class="switch" role="group" aria-label="Interface">
+						<button type="button" aria-pressed={mode === 'form'} class={mode === 'form' ? 'switch__option is-on' : 'switch__option'} onClick={() => setPrefs({ ...prefs, mode: 'form' })}>
+							Form
+						</button>
+						<button type="button" aria-pressed={mode === '3d'} class={mode === '3d' ? 'switch__option is-on' : 'switch__option'} onClick={() => setPrefs({ ...prefs, mode: '3d' })}>
+							3D
+						</button>
+					</div>
 					{installable ? (
 						<button type="button" class="button button--ghost" onClick={() => void installable.prompt()}>
 							Install
 						</button>
 					) : null}
-					<button
-						type="button"
-						class="button button--ghost"
-						aria-label="Toggle colour scheme"
-						onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-					>
-						{theme === 'dark' ? 'Light' : 'Dark'}
+					<button type="button" class="button button--ghost" aria-haspopup="dialog" onClick={() => setSettingsOpen(true)}>
+						Settings
 					</button>
 				</div>
 			</header>
 
-			<main>
-				<MachineStage
-					rotors={run.rotors}
-					reflectorLabel={run.reflector}
-					geometry={machineGeometry}
-					onSelectRotor={stepRotor}
-					selected={selected}
-					lidOpen={lidOpen}
-					onToggleLid={() => setLidOpen(!lidOpen)}
-					rendererKind={renderer}
-					onRendererChange={setRenderer}
-				/>
-				{rotorRow}
-
-				<section class="panel panel--io" aria-labelledby="io-heading">
-					<h2 id="io-heading">Message</h2>
-					<label class="field">
-						<span>Plain or cipher text</span>
-						<textarea
-							rows={3}
-							value={state.input}
-							spellcheck={false}
-							autocapitalize="characters"
-							onInput={(event) => setState({ ...state, input: (event.target as HTMLTextAreaElement).value.toUpperCase() })}
-						/>
-					</label>
-					<div class="output">
-						<span class="output__label">Lampboard</span>
-						<p class="output__text" aria-live="polite">
-							{run.output || '—'}
-						</p>
-						<button type="button" class="button button--ghost" disabled={!run.output} onClick={() => void navigator.clipboard?.writeText(run.output)}>
-							Copy
-						</button>
-					</div>
-					<p class="io__note">
-						Enigma is reciprocal: put the cipher text back in with the same settings and start positions and the plain text
-						returns. Start positions <strong>{state.positions}</strong>, window now <strong>{run.window}</strong>.
-					</p>
-				</section>
-
-				<Keyboard onKey={press} onBackspace={backspace} lit={lit} />
-
-				<Controls
-					state={state}
-					onChange={setState}
-					presetIds={PRESET_IDS}
-					onReset={() => setState({ ...stateForPreset(state.presetId) })}
-					onRollKey={() => setState(rollKey(state, Math.floor(Math.random() * 99999) + 1))}
-				/>
-
-				{state.presetId === CUSTOM_PRESET_ID ? <Builder state={state} onChange={setState} /> : null}
-
-				<section class="panel" aria-labelledby="signal-heading">
-					<h2 id="signal-heading">As a signal</h2>
-					<label class="field">
-						<span>Message key</span>
-						<input
-							type="text"
-							maxLength={3}
-							value={messageKey}
-							onInput={(event) => setMessageKey((event.target as HTMLInputElement).value.toUpperCase().replace(/[^A-Z]/g, ''))}
-						/>
-					</label>
-					<SignalPanel indicator={run.signal.indicator} body={run.signal.body} messageKey={messageKey} />
-				</section>
-
-				<KeyspaceExplorer state={state} />
-
-				<History />
+			<main id="main">
+				{mode === 'form' ? (
+					<FormMode
+						{...shared}
+						presetIds={PRESET_IDS}
+						rendererKind={renderer}
+						onRendererChange={setRenderer}
+						messageKey={messageKey}
+						onMessageKey={setMessageKey}
+						onRollKey={() => setState(rollKey(state, Math.floor(Math.random() * 99999) + 1))}
+					/>
+				) : (
+					<ThreeDMode {...shared} motion={prefs.motion} />
+				)}
 			</main>
 
 			<footer class="footer">
 				<p>
-					Rendering: <strong>{renderer === 'webgpu' ? 'WebGPU' : 'SVG'}</strong> · {rendererNote} · core v{VERSION}
+					<strong>{mode === '3d' ? 'Canvas 3D' : renderer === 'webgpu' ? 'WebGPU' : 'SVG'}</strong> · core v{VERSION} · {rendererNote}
 				</p>
 				<p>
-					Nothing leaves your device; there is no server to send it to. Settings live in <code>localStorage</code> and in the
-					URL hash.
+					Nothing leaves your device; there is no server to send it to. The machine lives in the URL, your preferences stay
+					here.
 				</p>
 			</footer>
+
+			<Settings prefs={prefs} onChange={setPrefs} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 		</div>
 	);
 }

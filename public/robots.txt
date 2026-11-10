@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://indpriyanshuraj-bot.github.io/enigma-lab/sitemap.xml

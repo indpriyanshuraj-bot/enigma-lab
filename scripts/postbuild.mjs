@@ -26,13 +26,22 @@ const version = createHash('sha256')
 	.digest('hex')
 	.slice(0, 12);
 
-const shell = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './404.html'];
+// Every HTML file the build produced is part of the offline shell, so a deep link
+// to the about page still works in a tunnel.
+const pages = files
+	.map((file) => relative(dist, file).split('\\').join('/'))
+	.filter((file) => file.endsWith('.html'))
+	.map((file) => `./${file}`);
+const shell = [
+	'./',
+	...new Set([...pages, './manifest.webmanifest', './favicon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './404.html']),
+];
 const assets = hashed.map((file) => `./${relative(dist, file).split('\\').join('/')}`);
 const urls = [...new Set([...shell, ...assets])];
 
 writeFileSync(join(dist, 'precache.json'), `${JSON.stringify({ version, generated: new Date().toISOString(), urls }, null, '\t')}\n`);
 
-const required = ['index.html', '404.html', 'sw.js', 'manifest.webmanifest', 'precache.json', 'favicon.svg'];
+const required = ['index.html', 'about.html', 'facts.html', '404.html', 'sw.js', 'manifest.webmanifest', 'precache.json', 'favicon.svg', 'sitemap.xml', 'robots.txt'];
 const present = new Set(walk(dist).map((file) => relative(dist, file)));
 const missing = required.filter((name) => !present.has(name));
 if (missing.length) {

@@ -3,16 +3,17 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>404 — that page was not on the wiring board</title>
+		<title>404 — no such contact</title>
 		<meta name="robots" content="noindex" />
 		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
 		<style>
 			:root {
 				color-scheme: dark;
 				--bg: #0b0f14;
-				--fg: #e6edf3;
-				--dim: #8b98a5;
+				--fg: #e8eef4;
+				--dim: #93a1af;
 				--accent: #d6a94a;
+				--edge: #26313e;
 			}
 			* {
 				box-sizing: border-box;
@@ -22,18 +23,14 @@
 				min-height: 100dvh;
 				display: grid;
 				place-items: center;
-				background: radial-gradient(circle at 50% 0%, #16202b, var(--bg) 70%);
+				background: radial-gradient(circle at 50% 0%, #16202b, var(--bg) 68%);
 				color: var(--fg);
-				font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+				font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 				padding: 2rem;
 			}
 			main {
 				max-width: 34rem;
 				text-align: center;
-			}
-			code {
-				color: var(--accent);
-				font-family: ui-monospace, "SF Mono", Menlo, monospace;
 			}
 			h1 {
 				font-size: clamp(1.5rem, 5vw, 2.25rem);
@@ -45,16 +42,27 @@
 				line-height: 1.6;
 				margin: 0 0 1.5rem;
 			}
+			code {
+				color: var(--accent);
+				font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+			}
+			nav {
+				display: flex;
+				gap: 0.5rem;
+				justify-content: center;
+				flex-wrap: wrap;
+			}
 			a {
 				display: inline-block;
-				padding: 0.7rem 1.1rem;
-				border-radius: 0.6rem;
-				border: 1px solid #2a3644;
+				padding: 0.65rem 1.1rem;
+				border-radius: 999px;
+				border: 1px solid var(--edge);
 				color: var(--fg);
 				text-decoration: none;
 				background: #131b24;
 			}
-			a:hover {
+			a:hover,
+			a:focus-visible {
 				border-color: var(--accent);
 			}
 		</style>
@@ -63,10 +71,14 @@
 		<main>
 			<h1>404 — no such contact</h1>
 			<p>
-				The reflector never sent this path back. A real Enigma cannot encode a letter as itself either, so consider this
+				The reflector never sent this path back. A real Enigma could not encode a letter as itself either, so consider this
 				page the machine's one honest answer.
 			</p>
-			<a href="./">Back to the machine</a>
+			<nav aria-label="Where to go instead">
+				<a href="./">The machine</a>
+				<a href="./about.html">About</a>
+				<a href="./facts.html">Fun facts</a>
+			</nav>
 		</main>
 	</body>
 </html>

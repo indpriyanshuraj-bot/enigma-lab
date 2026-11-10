@@ -21,7 +21,26 @@ rotor orders; rotors laid out in a row, with honest zoom and aspect.
 - The signal panel: the six-letter indicator, and why it leaked.
 - Playwright smoke tests on two viewports, in CI, on every pull request.
 
-## Phase 4 — quality (in progress)
+## Phase 4 — quality (done)
+
+Accessibility, SEO, themes, and a browser suite that runs the whole thing.
+
+- Skip link, landmarks, `aria-current`, a native `<dialog>`, `aria-live` readouts, real focus
+  rings, keyboard control of the 3D camera, and a motion switch that also honours
+  `prefers-reduced-motion`.
+- Four themes: dark, light, archive (sepia) and high contrast.
+- Per-page metadata, JSON-LD, a sitemap, and two content pages that ship no JavaScript.
+- 11 Playwright checks across a phone and a desktop, in CI, on every pull request and before
+  every deploy.
+
+## Phase 5 — next
+
+- A Lighthouse budget enforced in CI.
+- A screen-reader pass over the builder with real assistive technology.
+- Audio: the click of a key, the thunk of a rotor, off by default.
+- Keyboard mapping presets for AZERTY and Dvorak.
+
+## Older notes
 
 - Accessibility: focus order, reduced motion, machine labels. Largely done; a screen-reader
   pass over the builder is still owed.

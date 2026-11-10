@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>About Enigma Lab — how the simulation works</title>
+		<meta
+			name="description"
+			content="How Enigma Lab works: rotor-accurate stepping, the indicator procedure that leaked the key, the key-space arithmetic, and the people who actually broke the machine."
+		/>
+		<meta name="color-scheme" content="dark light" />
+		<meta name="theme-color" content="#0b0f14" />
+		<link rel="canonical" href="https://indpriyanshuraj-bot.github.io/enigma-lab/about.html" />
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<link rel="manifest" href="./manifest.webmanifest" />
+		<meta property="og:type" content="article" />
+		<meta property="og:title" content="About Enigma Lab" />
+		<meta property="og:description" content="How the simulation works, and who actually broke Enigma." />
+		<link rel="stylesheet" href="/src/styles.css" />
+		<script>
+			(function () {
+				try {
+					var stored = JSON.parse(localStorage.getItem('enigma-lab:prefs') || 'null');
+					var theme = stored && stored.theme;
+					if (!theme) theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+					document.documentElement.dataset.theme = theme;
+				} catch (error) {
+					document.documentElement.dataset.theme = 'dark';
+				}
+			})();
+		</script>
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "AboutPage",
+				"name": "About Enigma Lab",
+				"url": "https://indpriyanshuraj-bot.github.io/enigma-lab/about.html",
+				"about": { "@type": "Thing", "name": "Enigma machine" }
+			}
+		</script>
+	</head>
+	<body>
+		<div class="page">
+			<header class="page__head">
+				<h1>About</h1>
+				<nav class="nav" aria-label="Sections">
+					<a href="./">Machine</a>
+					<a href="./about.html" aria-current="page">About</a>
+					<a href="./facts.html">Fun facts</a>
+				</nav>
+			</header>
+
+			<main class="prose">
+				<p>
+					Enigma Lab is a simulation, not an animation. Every letter you type steps the rotors, travels through the
+					plugboard, crosses the reflector and comes back through a different path to light a lamp. Change a ring setting
+					and the ciphertext changes, because the wiring really did move.
+				</p>
+
+				<h2>Two interfaces, one machine</h2>
+				<p>
+					The <strong>form</strong> lists every setting an operator would read off a key sheet: rotor order, ring
+					settings, window positions and plugboard cables. The <strong>3D</strong> view is the same machine as an object
+					you can turn over, lift the lid on and tap. They share one state, so a letter typed in one appears in the other,
+					and the URL always describes the machine you are looking at.
+				</p>
+
+				<h2>What the simulation gets right</h2>
+				<ul>
+					<li>
+						<strong>The wiring.</strong> Rotors I–VIII, the thin Beta and Gamma rotors, and reflectors UKW-A, B, C and the
+						M4 thin pair, with the published measurements behind each.
+					</li>
+					<li>
+						<strong>The notches.</strong> Rotor I turns over at Q, rotor V at Z, the naval rotors VI–VIII at Z and M.
+						Which is why the machine can double-step.
+					</li>
+					<li>
+						<strong>The double step.</strong> The middle rotor advances when the right-hand rotor reaches its notch, and
+						again when it reaches its own. Operators did not want it; the machine did it anyway.
+					</li>
+					<li>
+						<strong>The procedure.</strong> A message key was sent twice, encrypted with the daily key. That repetition is
+						the leak the Polish Cipher Bureau and Bletchley Park attacked, and the signal panel shows it happening.
+					</li>
+				</ul>
+
+				<h2>What it does not pretend</h2>
+				<p>
+					This is not a reconstruction of a specific serial number. The plugboard, the lampboard and the case are
+					representations, not measurements. Ciphertext is not a claim about any real message, and nothing here is
+					encryption you should rely on — Enigma was broken, and this is a teaching machine.
+				</p>
+
+				<h2>Who actually broke it</h2>
+				<p>
+					The machine was never defeated by arithmetic. In 1932 the Polish Cipher Bureau handed the problem to three young
+					mathematicians from Poznań — <strong>Marian Rejewski</strong>, <strong>Jerzy Różycki</strong> and
+					<strong>Henryk Zygalski</strong> — and Rejewski reconstructed the military wiring from intercepted indicators
+					before the end of that year. Różycki's clock method and Zygalski's perforated sheets carried the attack forward.
+					In July 1939, with war days away, the Poles handed everything they had to British and French intelligence at a
+					meeting outside Warsaw.
+				</p>
+				<p>
+					At Bletchley Park, <strong>Alan Turing</strong> and <strong>Gordon Welchman</strong> turned that inheritance into
+					the bombe, with Harold "Doc" Keen's engineers at BTM building it. Hut 6 attacked army and air-force traffic; Hut
+					8 took the naval problem, which the four-rotor M4 made far harder.
+				</p>
+				<blockquote>
+					Hut 6 Ultra would never have got off the ground if we had not learned from the Poles, in the nick of time, the
+					details both of the German military version of the commercial Enigma machine, and of the operating procedures
+					that were in use. — Gordon Welchman
+				</blockquote>
+
+				<h2>How it is built</h2>
+				<p>
+					The mathematics lives in a separate, tested library: <code>@enigma-lab/core</code>, which is headless, has no
+					runtime dependencies and ships as ESM, CommonJS and UMD. This site pins one release of it by sha256 and refuses
+					to build against anything else. Rendering splits by job: WebGPU draws the top-down rotor discs where a device
+					offers an adapter, SVG draws the letters and controls, and the 3D view is a small painter's-algorithm renderer on
+					a 2D canvas so it works on every device.
+				</p>
+				<p>
+					There is no backend, no account and no analytics. The machine is stored in the URL; your preferences stay in
+					<code>localStorage</code> on this device.
+				</p>
+
+				<h2>Sources</h2>
+				<ul>
+					<li>Rotor and reflector wiring, notches and turnover letters: the Crypto Museum wiring catalogue and the 1954 <em>Catalog of Enigma cipher machine wirings</em>.</li>
+					<li>Operating procedure and key sheets: published Wehrmacht and Kriegsmarine key-sheet transcriptions.</li>
+					<li>History: the IEEE milestone record for the Polish Cipher Bureau's 1932–1939 work, and Bletchley Park's own accounts.</li>
+				</ul>
+			</main>
+
+			<footer class="footer">
+				<p><a href="./">Back to the machine</a> · <a href="./facts.html">Fun facts</a></p>
+				<p>MIT licensed. Built by Priyanshu Raj with Sarvam Agents.</p>
+			</footer>
+		</div>
+	</body>
+</html>

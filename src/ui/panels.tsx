@@ -1,4 +1,4 @@
-import { formatKeyspace, getPreset, keyspace, PRESETS } from '@enigma-lab/core';
+import { formatKeyspace, getPreset, keyspace, type KeyspaceBreakdown } from '@enigma-lab/core';
 import { useMemo, useState } from 'preact/hooks';
 import { CUSTOM_PRESET_ID, defaultCustomMachine, type LabState } from '../state/store.js';
 
@@ -86,7 +86,7 @@ export function Builder({ state, onChange }: { state: LabState; onChange: (next:
 }
 
 /** What-if arithmetic: move the sliders and watch the bits. */
-export function KeyspaceExplorer({ state }: { state: LabState }) {
+export function KeyspaceExplorer({ state, breakdown: live, total }: { state: LabState; breakdown: KeyspaceBreakdown; total: string }) {
 	const preset = state.presetId === CUSTOM_PRESET_ID ? null : getPreset(state.presetId);
 	const poolMax = preset ? preset.rotorPool.length : 100;
 	const [cables, setCables] = useState(state.plugboard.length);
@@ -109,6 +109,9 @@ export function KeyspaceExplorer({ state }: { state: LabState }) {
 			<p class="keyspace__total">
 				<span>{formatKeyspace(breakdown)}</span>
 				<small>keys · {breakdown.bits.toFixed(1)} bits</small>
+			</p>
+			<p class="keyspace__live">
+				This machine, as configured: <strong>{total}</strong> keys · <strong>{live.bits.toFixed(1)} bits</strong>
 			</p>
 			<label class="field">
 				<span>Plugboard cables: {cables}</span>
@@ -173,30 +176,5 @@ export function SignalPanel({ indicator, body, messageKey }: { indicator: string
 				Bureau's sheets and Bletchley Park's bombes attacked.
 			</p>
 		</>
-	);
-}
-
-/** Who broke it, and with what. */
-export function History() {
-	return (
-		<section class="panel" aria-labelledby="history-heading">
-			<h2 id="history-heading">Who actually broke it</h2>
-			<p>
-				The machine was never defeated by arithmetic. In 1932 the Polish Cipher Bureau handed the problem to three young
-				mathematicians from Poznań — Marian Rejewski, Jerzy Różycki and Henryk Zygalski — and Rejewski reconstructed the
-				military wiring from intercepted indicators before the end of that year. Różycki's clock method and Zygalski's
-				perforated sheets carried the attack forward, and in July 1939 the Poles handed everything they had to British and
-				French intelligence.
-			</p>
-			<p>
-				At Bletchley Park, Alan Turing and Gordon Welchman turned that inheritance into the bombe, with Harold Keen's
-				engineers at BTM building it. Hut 6 attacked army and air force traffic; Hut 8 took the naval problem, which the
-				four-rotor M4 made far harder. The rotors, notches and reflectors in this simulator follow the published
-				measurements of the machines themselves.
-			</p>
-			<p class="keyspace__note">
-				Presets here: {Object.values(PRESETS).map((preset) => preset.name).join(' · ')}.
-			</p>
-		</section>
 	);
 }
