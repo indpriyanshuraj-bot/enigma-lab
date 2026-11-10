@@ -17,7 +17,7 @@ test('the machine boots and ciphers AAAAA to BDZGO', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'Enigma Lab', level: 1 })).toBeVisible();
 	for (let index = 0; index < 5; index += 1) await page.getByRole('button', { name: 'Press A' }).click();
 
-	await expect(page.locator('.output__text')).toHaveText('BDZGO');
+	await expect(page.locator('.display__out')).toHaveText('BDZGO');
 	expect(errors).toEqual([]);
 });
 
@@ -25,24 +25,24 @@ test('typing on a physical keyboard works and Backspace edits', async ({ page })
 	await page.goto('./');
 	await page.locator('body').click({ position: { x: 4, y: 4 } });
 	await page.keyboard.type('HELLO');
-	await expect(page.locator('.output__text')).toHaveText(/^[A-Z]{5}$/);
+	await expect(page.locator('.display__out')).toHaveText(/^[A-Z]{5}$/);
 	await page.keyboard.press('Backspace');
-	await expect(page.locator('.output__text')).toHaveText(/^[A-Z]{4}$/);
+	await expect(page.locator('.display__out')).toHaveText(/^[A-Z]{4}$/);
 });
 
 test('the two interfaces share one machine', async ({ page }) => {
 	await page.goto('./');
 	for (let index = 0; index < 3; index += 1) await page.getByRole('button', { name: 'Press A' }).click();
-	const formOutput = await page.locator('.output__text').textContent();
+	const formOutput = await page.locator('.display__out').textContent();
 
 	await page.getByRole('button', { name: '3D', exact: true }).click();
 	await expect(page.locator('.machine--3d .machine__gpu')).toBeVisible();
-	// The same letters, read out in HTML so they stay selectable and announced.
-	await expect(page.locator('.readout__value--wide').nth(1)).toHaveText(formOutput ?? '');
-	await expect(page.locator('.readout__value--wide').first()).toHaveText('AAD');
+	// One display, both interfaces: the output does not change when the view does.
+	await expect(page.locator('.display__out')).toHaveText(formOutput ?? '');
+	await expect(page.locator('.display__window')).toHaveText('AAD');
 
-	await page.getByRole('button', { name: 'Form', exact: true }).click();
-	await expect(page.locator('.output__text')).toHaveText(formOutput ?? '');
+	await page.getByRole('button', { name: 'Keys', exact: true }).click();
+	await expect(page.locator('.display__out')).toHaveText(formOutput ?? '');
 });
 
 test('the 3D machine turns with the keyboard', async ({ page }) => {
@@ -59,25 +59,25 @@ test('the 3D machine turns with the keyboard', async ({ page }) => {
 
 test('the renderer names the backend it used', async ({ page }) => {
 	await page.goto('./');
-	await expect(page.getByText(/core v\d+\.\d+\.\d+/)).toBeVisible();
+	await expect(page.locator('.colophon')).toContainText(/core v\d+\.\d+\.\d+/);
 	await page.getByRole('button', { name: '3D', exact: true }).click();
 	// Headless Chromium has no WebGPU adapter, so this must fall through to WebGL
 	// or the canvas — either is a real backend, and the footer has to say which.
-	await expect(page.locator('.footer')).toContainText(/webgpu|webgl|canvas/i);
+	await expect(page.locator('.colophon')).toContainText(/webgpu|webgl|canvas/i);
 });
 
 test('tapping the 3D machine works a rotor', async ({ page }) => {
 	await page.goto('./');
 	await page.getByRole('button', { name: '3D', exact: true }).click();
 	await page.waitForTimeout(1000);
-	const windowBefore = await page.locator('.readout__value--wide').first().textContent();
+	const windowBefore = await page.locator('.display__window').textContent();
 	const box = await page.locator('.machine--3d .machine__stage').boundingBox();
 	if (!box) throw new Error('no stage');
 
 	// The rotor stack sits across the top of the machine. A tap on a wheel steps it,
 	// so the window readout has to change.
-	await page.mouse.click(box.x + box.width * 0.52, box.y + box.height * 0.22);
-	await expect(page.locator('.readout__value--wide').first()).not.toHaveText(windowBefore ?? '');
+	await page.mouse.click(box.x + box.width * 0.52, box.y + box.height * 0.3);
+	await expect(page.locator('.display__window')).not.toHaveText(windowBefore ?? '');
 });
 
 test('settings change the theme and the theme persists', async ({ page }) => {
@@ -96,18 +96,21 @@ test('settings change the theme and the theme persists', async ({ page }) => {
 
 test('the key space panel agrees with the arithmetic', async ({ page }) => {
 	await page.goto('./');
+	await page.getByRole('button', { name: 'Space' }).click();
 	await expect(page.locator('.keyspace__total small')).toHaveText(/keys · \d+\.\d bits/);
 	await expect(page.getByText(/Ten cables is stronger than thirteen/)).toBeVisible();
 });
 
 test('a custom machine can be built with many rotors', async ({ page }) => {
 	await page.goto('./');
+	await page.getByRole('button', { name: 'Set-up' }).click();
 	await page.getByRole('combobox').first().selectOption('custom');
 	await expect(page.getByRole('heading', { name: 'Build your own' })).toBeVisible();
 	await page.getByLabel(/Rotors: \d+/).fill('40');
 	await expect(page.getByLabel(/Rotors: 40/)).toBeVisible();
+	await page.getByRole('button', { name: 'Close Key sheet' }).click();
 	await page.getByRole('button', { name: 'Press A' }).click();
-	await expect(page.locator('.output__text')).toHaveText(/^[A-Z]$/);
+	await expect(page.locator('.display__out')).toHaveText(/^[A-Z]$/);
 });
 
 test('the about and facts pages stand on their own', async ({ page }) => {

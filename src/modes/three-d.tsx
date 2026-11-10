@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import {
 	buildScene3D,
 	hitTest3d,
+	MACHINE_COLOURS,
 	paintLabels,
 	renderTriangles,
 	type Hotspot,
 	type OrbitCamera,
-	type Palette,
 } from '../render/scene3d.js';
 import { createSurface, type Surface } from '../render/surface.js';
-import { parseColour } from '../render/colour.js';
 
 export interface ThreeDProps {
 	readonly windows: readonly string[];
@@ -33,26 +32,6 @@ const START: OrbitCamera = { yaw: -0.5, pitch: 0.5, distance: 400, focal: 640, t
 const PITCH_MIN = 0.08;
 const PITCH_MAX = 1.4;
 
-function readPalette(): Palette {
-	const style = getComputedStyle(document.documentElement);
-	const read = (name: string, fallback: string): string => {
-		const value = style.getPropertyValue(name).trim();
-		return parseColour(value) ? value : fallback;
-	};
-	return {
-		case: read('--case', '#1a232e'),
-		caseEdge: read('--edge-strong', '#35455a'),
-		rotor: read('--rotor', '#22303e'),
-		rotorRing: read('--rotor-ring', '#2b3b4c'),
-		ink: read('--ink', '#e8eef4'),
-		accent: read('--accent', '#d6a94a'),
-		key: read('--key', '#1b2430'),
-		keyLit: read('--accent', '#d6a94a'),
-		panel: read('--deck', '#202b38'),
-		lamp: read('--lamp', '#2b3b4c'),
-	};
-}
-
 /**
  * The whole machine, in three dimensions.
  *
@@ -74,7 +53,7 @@ export function ThreeD(props: ThreeDProps) {
 	const drag = useRef<{ x: number; y: number; yaw: number; pitch: number; moved: number } | null>(null);
 
 	const scene = useMemo(
-		() => buildScene3D({ rotorCount: windows.length, windows, rings, ids, reflector, lidOpen, alphabet, lit, plugged }, readPalette()),
+		() => buildScene3D({ rotorCount: windows.length, windows, rings, ids, reflector, lidOpen, alphabet, lit, plugged }, MACHINE_COLOURS),
 		[windows, rings, ids, reflector, lidOpen, alphabet, lit, plugged],
 	);
 
@@ -166,7 +145,7 @@ export function ThreeD(props: ThreeDProps) {
 		const fit = () => {
 			const rect = host.getBoundingClientRect();
 			const aspect = rect.width / Math.max(rect.height, 1);
-			const wanted = aspect < 1.25 ? 720 : aspect < 1.8 ? 500 : 430;
+			const wanted = aspect < 1.1 ? 700 : aspect < 1.5 ? 540 : aspect < 2 ? 430 : 380;
 			if (Math.abs(target.current.distance - wanted) > 1) {
 				target.current = { ...target.current, distance: wanted };
 				if (!motion) setCamera(target.current);

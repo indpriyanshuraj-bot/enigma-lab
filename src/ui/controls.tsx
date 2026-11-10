@@ -28,9 +28,7 @@ export function Controls({ state, onChange, presetIds, onReset, onRollKey }: Con
 	};
 
 	return (
-		<section class="panel" aria-labelledby="settings-heading">
-			<h2 id="settings-heading">Settings</h2>
-
+		<section class="key-sheet" aria-label="Machine settings">
 			<label class="field">
 				<span>Machine</span>
 				<select

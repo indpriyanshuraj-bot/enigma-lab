@@ -8,10 +8,14 @@ backend, works offline.
 
 ## Two interfaces, one machine
 
-The **form** lists every setting an operator read off a key sheet. The **3D** view is the same
-machine as an object you can turn over: drag to orbit, scroll to zoom, lift the lid, tap a
-rotor to work it. Both read and write the same state, so a letter typed in one appears in the
-other, and the URL always describes the machine you are looking at.
+The page behaves like a calculator: the readout sits at the top, the keys fill the rest, and
+every setting lives in a sheet that slides up from the bottom — nothing scrolls. Tap a wheel
+to step it, type on a real keyboard or the on-screen one, and watch the lampboard answer.
+
+The **3D** view is the same machine as an object you can turn over: drag to orbit, scroll to
+zoom, lift the lid, and tap its own keys, wheels and sockets. Both read and write the same
+state, so a letter typed in one appears in the other, and the URL always describes the machine
+you are looking at.
 
 There is also a settings dialog (four themes, renderer choice, motion), an
 [About page](./about.html) that explains the simulation and credits the people who broke the
