@@ -43,13 +43,20 @@ export function InstallBanner() {
 			timer = setTimeout(reveal, 6000);
 		}
 
-		const onFirstInput = () => reveal();
-		globalThis.addEventListener('pointerdown', onFirstInput, { once: true });
+		// Reveal after a gesture has *finished*, and only after a few of them: the
+		// banner takes its space in the layout, and growing the page mid-tap would
+		// move the key out from under the finger.
+		let interactions = 0;
+		const onInteraction = () => {
+			interactions += 1;
+			if (interactions >= 3) reveal();
+		};
+		globalThis.addEventListener('click', onInteraction);
 
 		return () => {
 			if (timer) clearTimeout(timer);
 			globalThis.removeEventListener('beforeinstallprompt', onPrompt);
-			globalThis.removeEventListener('pointerdown', onFirstInput);
+			globalThis.removeEventListener('click', onInteraction);
 		};
 	}, []);
 
