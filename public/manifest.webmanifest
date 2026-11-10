@@ -1,0 +1,19 @@
+{
+	"name": "Enigma Lab — working Enigma simulator",
+	"short_name": "Enigma Lab",
+	"description": "Operate a Wehrmacht Enigma I, a Kriegsmarine M4, or a machine you design yourself. Works offline.",
+	"id": "/enigma-lab/",
+	"start_url": "./",
+	"scope": "./",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#0b0f14",
+	"theme_color": "#0b0f14",
+	"categories": ["education", "utilities", "games"],
+	"icons": [
+		{ "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+		{ "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+		{ "src": "./icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+		{ "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+	]
+}

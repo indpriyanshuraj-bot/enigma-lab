@@ -1,0 +1,523 @@
+/* Enigma Lab — mobile first, no framework CSS, no preprocessor. */
+
+:root {
+	--bg: #0b0f14;
+	--bg-soft: #111823;
+	--panel: #131b24;
+	--case: #1a232e;
+	--rotor: #22303e;
+	--rotor-ring: #2b3b4c;
+	--rotor-notch: #3d3220;
+	--edge: #2a3644;
+	--wire: #4a5b6d;
+	--ink: #e6edf3;
+	--ink-dim: #8b98a5;
+	--accent: #d6a94a;
+	--accent-ink: #1b1408;
+	--danger: #d96a5f;
+	--radius: 14px;
+	--shadow: 0 12px 32px rgb(0 0 0 / 32%);
+	color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+	--bg: #f4f1ea;
+	--bg-soft: #ebe6db;
+	--panel: #fffdf8;
+	--case: #e3dccd;
+	--rotor: #d8cfbc;
+	--rotor-ring: #c9bfa9;
+	--rotor-notch: #f0dfb4;
+	--edge: #b9ad96;
+	--wire: #8a7f6b;
+	--ink: #1b1a17;
+	--ink-dim: #5f5a50;
+	--accent: #9a6b12;
+	--accent-ink: #fffdf8;
+	color-scheme: light;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	background:
+		radial-gradient(1200px 600px at 50% -10%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 70%),
+		var(--bg);
+	color: var(--ink);
+	font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+	font-size: 16px;
+	line-height: 1.55;
+	-webkit-font-smoothing: antialiased;
+}
+
+.app {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	max-width: 52rem;
+	margin: 0 auto;
+	padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom));
+}
+
+.masthead {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.masthead h1 {
+	margin: 0;
+	font-size: clamp(1.5rem, 6vw, 2rem);
+	letter-spacing: -0.02em;
+}
+
+.masthead__sub {
+	margin: 0.25rem 0 0;
+	color: var(--ink-dim);
+	font-size: 0.875rem;
+	max-width: 44ch;
+}
+
+.masthead__actions {
+	display: flex;
+	gap: 0.5rem;
+}
+
+main {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.panel {
+	background: var(--panel);
+	border: 1px solid var(--edge);
+	border-radius: var(--radius);
+	padding: 1rem;
+	box-shadow: var(--shadow);
+}
+
+.panel h2 {
+	margin: 0 0 0.75rem;
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--ink-dim);
+	font-weight: 600;
+}
+
+/* Machine drawing ------------------------------------------------------- */
+
+.machine {
+	margin: 0;
+	background: var(--bg-soft);
+	border: 1px solid var(--edge);
+	border-radius: var(--radius);
+	padding: 0.5rem;
+}
+
+.machine svg {
+	display: block;
+	width: 100%;
+	height: auto;
+	max-height: 44vh;
+	touch-action: manipulation;
+}
+
+.machine figcaption {
+	color: var(--ink-dim);
+	font-size: 0.75rem;
+	text-align: center;
+	padding: 0.25rem 0.5rem 0.4rem;
+}
+
+.machine__case {
+	fill: var(--case);
+	stroke: var(--edge);
+	stroke-width: 1.5;
+}
+
+.machine__case-label {
+	fill: var(--ink-dim);
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 11px;
+	letter-spacing: 0.08em;
+}
+
+.rotor {
+	cursor: pointer;
+}
+
+.rotor:focus-visible {
+	outline: none;
+}
+
+.rotor:focus-visible .rotor__body {
+	stroke: var(--accent);
+	stroke-width: 3;
+}
+
+.rotor__body {
+	fill: var(--rotor);
+	stroke: var(--edge);
+	stroke-width: 1.5;
+	transition: fill 120ms ease;
+}
+
+.rotor--notch .rotor__body {
+	fill: var(--rotor-notch);
+}
+
+.rotor__ring {
+	fill: var(--rotor-ring);
+	stroke: var(--wire);
+	stroke-width: 1;
+}
+
+.rotor__notch {
+	fill: var(--accent);
+}
+
+.rotor--notch .rotor__notch {
+	fill: var(--danger);
+}
+
+.rotor__letter {
+	fill: var(--ink);
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 22px;
+	text-anchor: middle;
+	dominant-baseline: middle;
+	font-weight: 600;
+	pointer-events: none;
+}
+
+.rotor__meta {
+	fill: var(--ink-dim);
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 10px;
+	text-anchor: middle;
+	dominant-baseline: middle;
+	pointer-events: none;
+}
+
+/* Inputs and output ----------------------------------------------------- */
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	margin-bottom: 0.9rem;
+}
+
+.field > span {
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--ink-dim);
+}
+
+.field small {
+	color: var(--ink-dim);
+	font-size: 0.75rem;
+}
+
+select,
+input,
+textarea {
+	width: 100%;
+	font: inherit;
+	color: var(--ink);
+	background: var(--bg-soft);
+	border: 1px solid var(--edge);
+	border-radius: 10px;
+	padding: 0.6rem 0.7rem;
+}
+
+textarea {
+	resize: vertical;
+	min-height: 4.5rem;
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+:where(select, input, textarea, button):focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.output {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	gap: 0.5rem;
+	background: var(--bg-soft);
+	border: 1px dashed var(--edge);
+	border-radius: 10px;
+	padding: 0.6rem 0.7rem;
+	margin-bottom: 0.6rem;
+}
+
+.output__label {
+	grid-column: 1 / -1;
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--ink-dim);
+}
+
+.output__text {
+	margin: 0;
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 1rem;
+	letter-spacing: 0.16em;
+	overflow-wrap: anywhere;
+}
+
+.io__note,
+.keyspace__note {
+	color: var(--ink-dim);
+	font-size: 0.8rem;
+	margin: 0;
+}
+
+/* Controls -------------------------------------------------------------- */
+
+.rotors {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	margin-bottom: 0.9rem;
+}
+
+.rotor-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+	align-items: end;
+	padding-bottom: 0.6rem;
+	border-bottom: 1px dashed var(--edge);
+}
+
+.rotor-row .field {
+	margin: 0;
+	grid-column: 1 / -1;
+}
+
+.stepper {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	font-size: 0.75rem;
+	color: var(--ink-dim);
+}
+
+.stepper output {
+	min-width: 1.6rem;
+	text-align: center;
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 1rem;
+	color: var(--ink);
+}
+
+.button,
+.stepper button {
+	font: inherit;
+	cursor: pointer;
+	background: var(--bg-soft);
+	color: var(--ink);
+	border: 1px solid var(--edge);
+	border-radius: 10px;
+	padding: 0.5rem 0.85rem;
+	transition: border-color 120ms ease, background 120ms ease;
+}
+
+.button:hover,
+.stepper button:hover {
+	border-color: var(--accent);
+}
+
+.button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.button--ghost {
+	background: transparent;
+	font-size: 0.85rem;
+	padding: 0.4rem 0.7rem;
+}
+
+.stepper button {
+	padding: 0.15rem 0.5rem;
+	line-height: 1.2;
+}
+
+/* Keyboard -------------------------------------------------------------- */
+
+.keyboard {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	background: var(--panel);
+	border: 1px solid var(--edge);
+	border-radius: var(--radius);
+	padding: 0.75rem;
+}
+
+.keyboard__row {
+	display: flex;
+	gap: 0.3rem;
+	justify-content: center;
+}
+
+.key {
+	flex: 1 1 0;
+	min-width: 0;
+	aspect-ratio: 1;
+	display: grid;
+	place-items: center;
+	font: inherit;
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: clamp(0.75rem, 3.4vw, 1rem);
+	color: var(--ink);
+	background: var(--bg-soft);
+	border: 1px solid var(--edge);
+	border-radius: 50%;
+	cursor: pointer;
+	touch-action: manipulation;
+	transition: background 90ms ease, border-color 90ms ease, transform 90ms ease;
+}
+
+.key:hover {
+	border-color: var(--wire);
+}
+
+.key:active,
+.key--lit {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--accent-ink);
+	transform: scale(0.94);
+}
+
+.key--wide {
+	flex: 0 0 auto;
+	width: 3rem;
+	border-radius: 999px;
+	aspect-ratio: auto;
+	padding-block: 0.5rem;
+}
+
+.keyboard__hint {
+	margin: 0.35rem 0 0;
+	text-align: center;
+	color: var(--ink-dim);
+	font-size: 0.75rem;
+}
+
+kbd {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 0.75em;
+	border: 1px solid var(--edge);
+	border-radius: 5px;
+	padding: 0.05rem 0.3rem;
+	background: var(--bg-soft);
+}
+
+/* Key space ------------------------------------------------------------- */
+
+.keyspace__total {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.5rem;
+	margin: 0 0 0.9rem;
+}
+
+.keyspace__total span {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: clamp(1.25rem, 5vw, 1.6rem);
+	color: var(--accent);
+	letter-spacing: -0.01em;
+}
+
+.keyspace__total small {
+	color: var(--ink-dim);
+	font-size: 0.8rem;
+}
+
+.keyspace__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+	gap: 0.6rem;
+	margin: 0 0 0.9rem;
+}
+
+.keyspace__grid dt {
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--ink-dim);
+}
+
+.keyspace__grid dd {
+	margin: 0;
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 0.95rem;
+}
+
+/* Footer ---------------------------------------------------------------- */
+
+.footer {
+	color: var(--ink-dim);
+	font-size: 0.75rem;
+	border-top: 1px solid var(--edge);
+	padding-top: 0.75rem;
+}
+
+.footer p {
+	margin: 0.2rem 0;
+}
+
+.footer code {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	color: var(--ink);
+}
+
+/* Wider screens --------------------------------------------------------- */
+
+@media (min-width: 46rem) {
+	.app {
+		padding-inline: 1.5rem;
+	}
+
+	.rotor-row {
+		grid-template-columns: 1.4fr 1fr 1fr;
+	}
+
+	.rotor-row .field {
+		grid-column: auto;
+	}
+
+	.machine svg {
+		max-height: 52vh;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+	}
+}

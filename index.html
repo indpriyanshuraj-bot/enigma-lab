@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Enigma Lab — a working Enigma machine in your browser</title>
+		<meta
+			name="description"
+			content="Operate a Wehrmacht Enigma I, a Kriegsmarine M4 or a machine you design yourself. Rotor wiring, notches, ring settings, plugboard and the full key space, computed live."
+		/>
+		<meta name="color-scheme" content="dark light" />
+		<meta name="theme-color" content="#0b0f14" />
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+		<link rel="manifest" href="./manifest.webmanifest" />
+		<link rel="canonical" href="https://indpriyanshuraj-bot.github.io/enigma-lab/" />
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="Enigma Lab" />
+		<meta property="og:description" content="A working Enigma machine in your browser, with WebGPU rendering and an SVG fallback." />
+		<style>
+			/* Critical shell so the page paints before the bundle arrives. */
+			html {
+				background: #0b0f14;
+				color: #e6edf3;
+				font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+			}
+			body {
+				margin: 0;
+				min-height: 100dvh;
+			}
+			#boot {
+				display: grid;
+				place-items: center;
+				min-height: 100dvh;
+				gap: 0.75rem;
+				text-align: center;
+				padding: 2rem;
+			}
+			#boot p {
+				margin: 0;
+				opacity: 0.72;
+				max-width: 34ch;
+				line-height: 1.5;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="boot">
+				<strong>Enigma Lab</strong>
+				<p>Loading the machine…</p>
+			</div>
+		</div>
+		<noscript>
+			<div style="max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem; line-height: 1.6">
+				<h1 style="font-size: 1.5rem">Enigma Lab needs JavaScript</h1>
+				<p>
+					This is a working simulation: every key press has to step three rotors, cross a reflector and come back
+					through a plugboard, so the page runs the cipher in your browser. Nothing is sent to a server — there is no
+					server.
+				</p>
+				<p>
+					With scripting off you can still read about the machine: the Wehrmacht Enigma I chose three rotors from five
+					(60 orders), each rotor had 26 ring settings and 26 start positions, and ten plugboard cables gave
+					150,738,274,937,250 arrangements — about 2.79 × 10<sup>24</sup> keys, roughly 81 bits.
+				</p>
+				<p>Turn JavaScript on to operate it.</p>
+			</div>
+		</noscript>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

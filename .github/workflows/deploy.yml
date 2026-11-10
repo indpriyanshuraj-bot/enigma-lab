@@ -1,0 +1,71 @@
+name: deploy
+
+# main is the live site: build, verify, then publish to GitHub Pages.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  CI: true
+  BASE_PATH: /${{ github.event.repository.name }}/
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - run: corepack enable
+
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Cache the pinned library tarball
+        uses: actions/cache@v6
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ hashFiles('lib.lock.json') }}
+
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - run: pnpm run lib
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - run: pnpm test
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
