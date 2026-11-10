@@ -1102,6 +1102,7 @@ input[type='range']::-moz-range-thumb {
 	margin: 0;
 	display: flex;
 	flex-direction: column;
+	align-items: stretch;
 	min-height: 0;
 	flex: 1 1 auto;
 	overflow: hidden;
@@ -1153,8 +1154,9 @@ input[type='range']::-moz-range-thumb {
 
 .machine__caption {
 	flex: 0 0 auto;
+	width: 100%;
 	display: flex;
-	flex-wrap: nowrap;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: center;
 	gap: 0.4rem;
@@ -1163,16 +1165,12 @@ input[type='range']::-moz-range-thumb {
 	font-size: 0.72rem;
 }
 
-.machine__caption > span:first-child {
-	display: none;
-}
-
 .machine__camera-actions {
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
 	gap: 0.25rem;
-	min-width: 0;
+	width: 100%;
 }
 
 .machine__camera-actions .button {
@@ -1319,12 +1317,6 @@ input[type='range']::-moz-range-thumb {
 .install .button {
 	font-size: 0.75rem;
 	padding: 0.4rem 0.7rem;
-}
-
-@media (min-width: 48rem) {
-	.machine__caption > span:first-child {
-		display: inline;
-	}
 }
 
 /* Density: one switch, everything follows. */
