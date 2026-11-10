@@ -24,19 +24,53 @@ export interface OrbitCamera {
 	readonly target: Vec3;
 }
 
-/** Every colour the model uses, resolved from CSS by the caller. */
+/** Every colour the model uses. */
 export interface Palette {
-	readonly case: string;
-	readonly caseEdge: string;
+	readonly caseSide: string;
+	readonly caseTop: string;
+	readonly deck: string;
 	readonly rotor: string;
+	/** One colour per rotor, cycled, so the wheels read as separate parts. */
+	readonly rotors: readonly string[];
 	readonly rotorRing: string;
+	readonly reflector: string;
 	readonly ink: string;
 	readonly accent: string;
 	readonly key: string;
+	readonly keyInk: string;
 	readonly keyLit: string;
 	readonly panel: string;
 	readonly lamp: string;
+	readonly lampLit: string;
+	readonly socket: string;
+	readonly socketPlugged: string;
 }
+
+/**
+ * The machine's own materials.
+ *
+ * These do not follow the page theme: a walnut case stays a walnut case in a
+ * light room and a dark one. The interface changes; the object does not.
+ */
+export const MACHINE_COLOURS: Palette = {
+	caseSide: '#22343f',
+	caseTop: '#2c4a5a',
+	deck: '#1b2b34',
+	rotor: '#3f6f8f',
+	rotors: ['#3f6f8f', '#4f8a5f', '#b07a2a', '#7a5b9a', '#3f8a8a', '#a05a5a'],
+	rotorRing: '#132029',
+	reflector: '#c9a227',
+	ink: '#f6f1e6',
+	accent: '#f5b942',
+	key: '#f0e7d3',
+	keyInk: '#241d15',
+	keyLit: '#f5b942',
+	panel: '#1b2b34',
+	lamp: '#4a3d29',
+	lampLit: '#ffd166',
+	socket: '#b08d3a',
+	socketPlugged: '#f5b942',
+};
 
 export interface Label {
 	readonly at: Vec3;
@@ -217,32 +251,32 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 			{ x: maxX, y: bottom, z: zBack },
 			{ x: maxX, y: bottom, z: deckBottom.z },
 			{ x: minX, y: bottom, z: deckBottom.z },
-			palette.case,
-			0.5,
+			palette.caseSide,
+			0.55,
 		),
 		quad(
 			{ x: minX, y: bottom, z: zBack },
 			{ x: maxX, y: bottom, z: zBack },
 			{ x: maxX, y: top, z: zBack },
 			{ x: minX, y: top, z: zBack },
-			palette.case,
-			0.52,
+			palette.caseSide,
+			0.6,
 		),
 		quad(
 			{ x: minX, y: bottom, z: zBack },
 			{ x: minX, y: bottom, z: deckBottom.z },
 			{ x: minX, y: deckTop.y, z: deckTop.z },
 			{ x: minX, y: top, z: zBack },
-			palette.case,
-			0.6,
+			palette.caseTop,
+			0.86,
 		),
 		quad(
 			{ x: maxX, y: bottom, z: zBack },
 			{ x: maxX, y: bottom, z: deckBottom.z },
 			{ x: maxX, y: deckTop.y, z: deckTop.z },
 			{ x: maxX, y: top, z: zBack },
-			palette.case,
-			0.6,
+			palette.caseTop,
+			0.86,
 		),
 		// The deck itself, catching the light.
 		quad(
@@ -250,8 +284,8 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 			{ x: maxX, y: deckTop.y, z: deckTop.z },
 			{ x: maxX, y: deckBottom.y, z: deckBottom.z },
 			{ x: minX, y: deckBottom.y, z: deckBottom.z },
-			palette.panel,
-			0.94,
+			palette.deck,
+			0.96,
 		),
 		// Front skirt below the deck edge.
 		quad(
@@ -259,8 +293,8 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 			{ x: maxX, y: bottom, z: deckBottom.z },
 			{ x: maxX, y: deckBottom.y, z: deckBottom.z },
 			{ x: minX, y: deckBottom.y, z: deckBottom.z },
-			palette.case,
-			0.72,
+			palette.caseSide,
+			0.66,
 		),
 	);
 
@@ -271,24 +305,25 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 				{ x: maxX, y: RADIUS * 1.16, z: zBack },
 				{ x: maxX, y: RADIUS * 1.16, z: zFront },
 				{ x: minX, y: RADIUS * 1.16, z: zFront },
-				palette.case,
-				0.98,
+				palette.caseTop,
+				1,
 			),
 		);
 	}
 
 	// Reflector, then the rotors standing proud of the case.
-	faces.push(...cylinder(reflector, RADIUS * 0.72, 10, palette.rotorRing, palette.rotorRing));
+	faces.push(...cylinder(reflector, RADIUS * 0.72, 10, palette.reflector, palette.reflector));
 	labels.push({ at: { x: reflector.x, y: RADIUS * 0.86, z: 0 }, text: input.reflector, colour: palette.ink, scale: 0.7 });
 
 	centres.forEach((centre, index) => {
 		const band = RADIUS * 1.04;
-		faces.push(...cylinder(centre, RADIUS, LENGTH, palette.rotor, palette.rotorRing));
+		const body = palette.rotors[index % Math.max(palette.rotors.length, 1)] ?? palette.rotor;
+		faces.push(...cylinder(centre, RADIUS, LENGTH, body, palette.rotorRing));
 		faces.push(...cylinder(centre, band, Math.min(LENGTH * 0.55, 18), palette.rotorRing, palette.rotorRing));
 		labels.push({
 			at: { x: centre.x, y: band * 0.94, z: 0 },
 			text: input.windows[index] ?? '',
-			colour: palette.ink,
+			colour: palette.key,
 			scale: 1.5,
 			bold: true,
 		});
@@ -315,7 +350,7 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 			const lit = input.lit === letter;
 			faces.push(deckPlate(x, t, columnStep * 0.78, 0.075, lit ? palette.keyLit : palette.key, 1));
 			const at = deckPoint(x, t, 0.9);
-			labels.push({ at, text: letter, colour: lit ? palette.case : palette.ink, scale: 0.82, bold: true });
+			labels.push({ at, text: letter, colour: lit ? palette.keyInk : palette.keyInk, scale: 0.82, bold: true });
 			hotspots.push({ kind: 'key', letter, at: deckPoint(x, t, 0.6), radius: columnStep * 0.5 });
 		});
 	});
@@ -326,8 +361,8 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 			const x = centreX + offset;
 			const t = 0.07 + rowIndex * 0.065;
 			const lit = input.lit === letter;
-			faces.push(deckPlate(x, t, columnStep * 0.42, 0.04, lit ? palette.accent : palette.lamp, 1));
-			if (lit) labels.push({ at: deckPoint(x, t, 0.9), text: letter, colour: palette.case, scale: 0.55, bold: true });
+			faces.push(deckPlate(x, t, columnStep * 0.42, 0.04, lit ? palette.lampLit : palette.lamp, 1));
+			if (lit) labels.push({ at: deckPoint(x, t, 0.9), text: letter, colour: palette.keyInk, scale: 0.55, bold: true });
 		});
 	});
 
@@ -338,8 +373,8 @@ export function buildScene3D(input: Machine3DInput, palette: Palette): Scene3D {
 		const x = centreX + (column - (columns - 1) / 2) * columnStep * 0.92;
 		const t = 0.78 + row * 0.11;
 		const plugged = input.plugged.includes(letter);
-		faces.push(deckPlate(x, t, columnStep * 0.4, 0.055, plugged ? palette.accent : palette.lamp, 1));
-		labels.push({ at: deckPoint(x, t, 0.9), text: letter, colour: plugged ? palette.case : palette.ink, scale: 0.48, bold: plugged });
+		faces.push(deckPlate(x, t, columnStep * 0.4, 0.055, plugged ? palette.socketPlugged : palette.socket, 1));
+		labels.push({ at: deckPoint(x, t, 0.9), text: letter, colour: palette.keyInk, scale: 0.48, bold: plugged });
 		hotspots.push({ kind: 'plug', letter, at: deckPoint(x, t, 0.6), radius: columnStep * 0.38 });
 	});
 
