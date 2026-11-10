@@ -3,26 +3,73 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<title>Enigma Lab — a working Enigma machine in your browser</title>
+		<title>Enigma Lab — operate a real Enigma machine in your browser</title>
 		<meta
 			name="description"
-			content="Operate a Wehrmacht Enigma I, a Kriegsmarine M4 or a machine you design yourself. Rotor wiring, notches, ring settings, plugboard and the full key space, computed live."
+			content="A working Enigma simulator: Wehrmacht Enigma I, Kriegsmarine M3 and M4, or a machine you build yourself. Rotors, notches, ring settings, plugboard and the full key space, computed live. Works offline."
 		/>
 		<meta name="color-scheme" content="dark light" />
 		<meta name="theme-color" content="#0b0f14" />
+		<link rel="canonical" href="https://indpriyanshuraj-bot.github.io/enigma-lab/" />
 		<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
 		<link rel="apple-touch-icon" href="./icons/icon-192.png" />
 		<link rel="manifest" href="./manifest.webmanifest" />
-		<link rel="canonical" href="https://indpriyanshuraj-bot.github.io/enigma-lab/" />
 		<meta property="og:type" content="website" />
-		<meta property="og:title" content="Enigma Lab" />
-		<meta property="og:description" content="A working Enigma machine in your browser, with WebGPU rendering and an SVG fallback." />
+		<meta property="og:site_name" content="Enigma Lab" />
+		<meta property="og:title" content="Enigma Lab — operate a real Enigma machine in your browser" />
+		<meta
+			property="og:description"
+			content="Rotors, notches, ring settings, plugboard and 81 bits of key space. Two interfaces, one machine: a form and a 3D model you can turn over."
+		/>
+		<meta property="og:url" content="https://indpriyanshuraj-bot.github.io/enigma-lab/" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="Enigma Lab" />
+		<meta name="twitter:description" content="A working Enigma machine in your browser. WebGPU, 3D, offline." />
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebApplication",
+				"name": "Enigma Lab",
+				"url": "https://indpriyanshuraj-bot.github.io/enigma-lab/",
+				"applicationCategory": "EducationalApplication",
+				"operatingSystem": "Any browser",
+				"browserRequirements": "Requires JavaScript. WebGPU optional.",
+				"description": "A working Enigma simulator with rotor-accurate stepping, key-sheet procedures and a live key-space calculation.",
+				"offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+				"featureList": ["Enigma I, M3 and M4", "Interactive 3D model", "Key-space explorer", "Offline capable", "No tracking"]
+			}
+		</script>
+		<script>
+			/* Theme before first paint, so the page never flashes the wrong colours. */
+			(function () {
+				try {
+					var stored = JSON.parse(localStorage.getItem('enigma-lab:prefs') || 'null');
+					var theme = stored && stored.theme;
+					if (!theme) theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+					document.documentElement.dataset.theme = theme;
+					if (stored && stored.motion === false) document.documentElement.dataset.motion = 'off';
+				} catch (error) {
+					document.documentElement.dataset.theme = 'dark';
+				}
+			})();
+		</script>
 		<style>
-			/* Critical shell so the page paints before the bundle arrives. */
 			html {
 				background: #0b0f14;
-				color: #e6edf3;
-				font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+				color: #e8eef4;
+				font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+			}
+			html[data-theme='light'] {
+				background: #f5f2ea;
+				color: #191713;
+			}
+			html[data-theme='sepia'] {
+				background: #ede0c6;
+				color: #2f2618;
+			}
+			html[data-theme='contrast'] {
+				background: #000;
+				color: #fff;
 			}
 			body {
 				margin: 0;
@@ -31,7 +78,7 @@
 			#boot {
 				display: grid;
 				place-items: center;
-				min-height: 100dvh;
+				min-height: 60dvh;
 				gap: 0.75rem;
 				text-align: center;
 				padding: 2rem;
@@ -52,19 +99,18 @@
 			</div>
 		</div>
 		<noscript>
-			<div style="max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem; line-height: 1.6">
-				<h1 style="font-size: 1.5rem">Enigma Lab needs JavaScript</h1>
+			<div class="page prose" style="padding-top: 2rem">
+				<h1 style="font-size: 1.6rem">Enigma Lab needs JavaScript</h1>
 				<p>
-					This is a working simulation: every key press has to step three rotors, cross a reflector and come back
-					through a plugboard, so the page runs the cipher in your browser. Nothing is sent to a server — there is no
-					server.
+					This is a working simulation: every key press has to step three rotors, cross the reflector and come back
+					through a plugboard, so the cipher runs in your browser. Nothing is sent anywhere — there is no server.
 				</p>
 				<p>
-					With scripting off you can still read about the machine: the Wehrmacht Enigma I chose three rotors from five
+					With scripting off, the arithmetic still works on paper. A Wehrmacht Enigma I chose three rotors from five
 					(60 orders), each rotor had 26 ring settings and 26 start positions, and ten plugboard cables gave
 					150,738,274,937,250 arrangements — about 2.79 × 10<sup>24</sup> keys, roughly 81 bits.
 				</p>
-				<p>Turn JavaScript on to operate it.</p>
+				<p><a href="./about.html">Read about the machine</a> or <a href="./facts.html">browse the facts</a>.</p>
 			</div>
 		</noscript>
 		<script type="module" src="/src/main.tsx"></script>

@@ -22,6 +22,13 @@ export default defineConfig({
 		assetsInlineLimit: 2048,
 		reportCompressedSize: true,
 		rollupOptions: {
+			// Three pages, one bundle graph: the app, plus two static pages that ship no
+			// JavaScript at all beyond a theme probe.
+			input: {
+				main: fileURLToPath(new URL('./index.html', import.meta.url)),
+				about: fileURLToPath(new URL('./about.html', import.meta.url)),
+				facts: fileURLToPath(new URL('./facts.html', import.meta.url)),
+			},
 			output: {
 				entryFileNames: 'assets/[name]-[hash].js',
 				chunkFileNames: 'assets/[name]-[hash].js',
