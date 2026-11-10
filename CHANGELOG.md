@@ -4,6 +4,28 @@ All notable changes to the site are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning, and each tag is a deployable snapshot of `dist/`.
 
+## [0.7.0] - 2026-11-10
+
+### Changed
+
+- **The machine is drawn by three.js.** A hand-rolled painter's algorithm was the wrong tool: it
+  could not occlude text properly, it had no real lighting, and every fix cost another quirk.
+  The scene is now solid geometry — machined rotor drums, a lathed brass reflector, ivory key
+  caps with printed legends, a sloped deck, a shadowed bench — with `MeshStandardMaterial`,
+  three lights, soft shadows and `OrbitControls`.
+- Text is a canvas texture on the part it belongs to, so a legend is legible at any angle
+  because it is printed on the object rather than floating over it.
+- Picking is a raycast against the actual meshes: keys, rotors, sockets and the note.
+- The camera fits the machine's bounding sphere from both axes of the frame, so the framing
+  holds on a phone, in landscape, and in full screen.
+- JS minification moved to esbuild: the oxc native binding was falling back to WASM on a bundle
+  this size and running out of memory.
+
+### Removed
+
+- `scene3d.ts`, `glyphs.ts`, `surface.ts` and the four-backend triangle ladder, superseded by
+  the engine.
+
 ## [0.6.0] - 2026-11-10
 
 ### Changed
