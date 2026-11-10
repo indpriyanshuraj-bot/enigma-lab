@@ -4,6 +4,27 @@ All notable changes to the site are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning, and each tag is a deployable snapshot of `dist/`.
 
+## [0.7.1] - 2026-11-10
+
+### Fixed
+
+- **The 3D machine ignored every input.** The canvas still carried `pointer-events: none`
+  from the old two-layer design, so neither the orbit controls nor the raycast ever saw a
+  pointer: nothing rotated by drag, nothing zoomed by pinch, and no key could be pressed.
+  The engine owns that surface now.
+- The scene rendered on every animation frame whether or not anything had changed, which
+  starved input on slow GPUs. It renders on demand.
+- Window letters, rotor captions and the reflector label were sprites with a transparent
+  background, so they disappeared against the drums. They are printed plates now — dark
+  backing, white and amber ink, and exempt from the depth buffer — and the captions moved up
+  to the drum shoulder where they can be read.
+
+### Added
+
+- `test/input.spec.ts`: a tap on the deck must press a key, and a drag must move the camera.
+  The stage publishes its camera in `data-view`, so the drag is checked against the real
+  camera rather than against pixels.
+
 ## [0.7.0] - 2026-11-10
 
 ### Changed
