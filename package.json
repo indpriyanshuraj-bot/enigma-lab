@@ -1,6 +1,6 @@
 {
   "name": "enigma-lab",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "A static, offline-capable Enigma simulator: WebGPU with an SVG fallback, mobile first, driven by @enigma-lab/core.",
   "license": "MIT",
