@@ -23,7 +23,9 @@ export interface ThreeDModeProps {
 	readonly onPress: (letter: string) => void;
 	readonly onBackspace: () => void;
 	readonly onPlug: (letter: string) => void;
-	readonly preference: 'auto' | 'webgpu' | 'webgl' | 'canvas';
+	readonly onNote: () => void;
+	readonly notes: readonly string[];
+	readonly preference: 'auto' | 'webgpu' | 'webgl' | 'svg';
 	readonly onBackend: (backend: string) => void;
 	readonly pendingPlug: string | null;
 }
@@ -54,6 +56,8 @@ export function ThreeDMode(props: ThreeDModeProps) {
 				onRotor={props.onSelectRotor}
 				onKey={props.onPress}
 				onPlug={props.onPlug}
+				onNote={props.onNote}
+				notes={props.notes}
 				onBackend={props.onBackend}
 			/>
 

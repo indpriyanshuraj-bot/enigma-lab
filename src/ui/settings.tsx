@@ -6,6 +6,7 @@ export interface SettingsProps {
 	readonly onChange: (next: Prefs) => void;
 	readonly open: boolean;
 	readonly onClose: () => void;
+	readonly onShowLog: () => void;
 }
 
 /**
@@ -15,7 +16,7 @@ export interface SettingsProps {
  * Escape handling and `inert` background behaviour right, so it is used rather
  * than re-implemented.
  */
-export function Settings({ prefs, onChange, open, onClose }: SettingsProps) {
+export function Settings({ prefs, onChange, open, onClose, onShowLog }: SettingsProps) {
 	const ref = useRef<HTMLDialogElement>(null);
 
 	useEffect(() => {
@@ -79,10 +80,17 @@ export function Settings({ prefs, onChange, open, onClose }: SettingsProps) {
 							value={prefs.renderer}
 							onChange={(event) => onChange({ ...prefs, renderer: (event.target as HTMLSelectElement).value as Prefs['renderer'] })}
 						>
-							<option value="auto">Automatic — WebGPU, then WebGL, then canvas</option>
+							<option value="auto">Automatic — WebGPU, WebGL2, WebGL1, SVG</option>
 							<option value="webgpu">WebGPU only</option>
-							<option value="webgl">WebGL2 only</option>
-							<option value="canvas">2D canvas only</option>
+							<option value="webgl">WebGL only (2, then 1)</option>
+							<option value="svg">SVG only</option>
+						</select>
+					</label>
+					<label class="field field--row">
+						<span>Control size</span>
+						<select value={prefs.density} onChange={(event) => onChange({ ...prefs, density: (event.target as HTMLSelectElement).value as Prefs['density'] })}>
+							<option value="comfortable">Comfortable</option>
+							<option value="compact">Compact — more keys, less air</option>
 						</select>
 					</label>
 					<label class="field field--row">
@@ -90,6 +98,18 @@ export function Settings({ prefs, onChange, open, onClose }: SettingsProps) {
 						<input type="checkbox" checked={prefs.motion} onChange={(event) => onChange({ ...prefs, motion: (event.target as HTMLInputElement).checked })} />
 						<small>Easing and transitions. Turn off for a still interface.</small>
 					</label>
+				</fieldset>
+
+				<fieldset class="settings__group">
+					<legend>Developer</legend>
+					<label class="field field--row">
+						<span>Console log</span>
+						<input type="checkbox" checked={prefs.logs} onChange={(event) => onChange({ ...prefs, logs: (event.target as HTMLInputElement).checked })} />
+						<small>Keeps the last 200 console lines, for phones with no console.</small>
+					</label>
+					<button type="button" class="button button--ghost" onClick={onShowLog}>
+						View log
+					</button>
 				</fieldset>
 
 				<p class="settings__note">
