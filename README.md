@@ -6,6 +6,17 @@ backend, works offline.
 
 **[Open the machine](https://indpriyanshuraj-bot.github.io/enigma-lab/)**
 
+## What you can do with it
+
+- Operate the machine: press keys, watch the rotors step, catch the double step.
+- Turn it: drag to change the viewing angle, scroll to zoom, lift the lid.
+- Work a rotor: tap it to step it, or move it left and right in the stack.
+- Set a key sheet: rotors, ring settings, window positions, plugboard cables.
+- Send a signal: the six-letter indicator, with the message key encrypted twice.
+- Build a machine that never existed: up to a hundred rotors, your own notches and
+  alphabet, wiring derived from a seed you can share.
+- Move the sliders in the key-space panel and watch 81 bits appear and disappear.
+
 ## What is here
 
 | Path | What it is |
@@ -14,6 +25,7 @@ backend, works offline.
 | `public/` | service worker, web app manifest, icons, `404.html`, `robots.txt` |
 | `scripts/fetch-lib.mjs` | downloads and sha256-verifies the pinned core release |
 | `scripts/postbuild.mjs` | writes the precache manifest, checks PWA artifacts, enforces budgets |
+| `test/smoke.spec.ts` | Playwright: boots, ciphers `AAAAA` to `BDZGO`, no console errors |
 | `lib.lock.json` | the one release of `@enigma-lab/core` this build bundles |
 | `test/` | assertions against the built `dist/` |
 
@@ -35,6 +47,7 @@ pnpm install
 pnpm run dev       # fetches the pinned core, then Vite on :5173
 pnpm run build     # fetch + Vite (Rolldown) + postbuild checks
 pnpm test          # asserts on dist/
+pnpm run test:e2e  # Playwright: two viewports, real browser
 pnpm run preview
 ```
 
@@ -45,8 +58,10 @@ bundler family the library itself is built with.
 
 - **Mobile first.** One column, thumb-sized targets, `100dvh` layout, safe-area insets.
 - **Keyboard and pointer.** A–Z, `Backspace`, `Esc`; every rotor is also a button.
-- **Rendering with a real fallback.** WebGPU is used when the device offers an adapter;
-  otherwise the same drawing is produced as SVG. The footer always says which one drew it.
+- **Rendering with a real fallback.** WebGPU rasterises the rotor discs when the device
+  offers an adapter; SVG draws them otherwise, and always draws the letters, captions,
+  focus rings and the lid. Both read the same projected scene and the same hit test, so a
+  tap lands on the same rotor either way. The footer says which backend drew the frame.
 - **Offline.** A service worker precaches the shell and hashed assets, and answers a
   navigation with the cached shell when the network is gone.
 - **Progressive.** `<noscript>` explains the machine and the key-space arithmetic for
