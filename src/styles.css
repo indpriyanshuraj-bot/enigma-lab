@@ -1124,8 +1124,7 @@ input[type='range']::-moz-range-thumb {
 	cursor: grabbing;
 }
 
-.machine__gpu,
-.machine__overlay {
+.machine__gpu {
 	position: absolute;
 	inset: 0;
 	width: 100%;
@@ -1133,7 +1132,16 @@ input[type='range']::-moz-range-thumb {
 }
 
 .machine__gpu {
-	pointer-events: none;
+	/* The engine owns this surface: it needs every pointer event for orbit, pinch
+	   and the raycast that turns a tap into a key press. */
+	pointer-events: auto;
+	touch-action: none;
+	display: block;
+	cursor: grab;
+}
+
+.machine__stage--3d:active .machine__gpu {
+	cursor: grabbing;
 }
 
 .machine__lid-hint {

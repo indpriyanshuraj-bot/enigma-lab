@@ -101,7 +101,7 @@ export async function createMachine3D(
 	onPick: (pick: Pick) => void,
 ): Promise<Machine3D> {
 	const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-	renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2));
+	renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 1.75));
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -192,6 +192,13 @@ export async function createMachine3D(
 	const deckNormal = new THREE.Vector3(0, layout.deckBottomZ - layout.deckTopZ, -(layout.deckBottomY - layout.deckTopY)).normalize();
 	const deck = addBox(width + WALL * 2, 8, deckLength, centreX, (layout.deckTopY + layout.deckBottomY) / 2, (layout.deckTopZ + layout.deckBottomZ) / 2, materials.deck);
 	deck.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), deckNormal);
+
+	/** Set when something needs a redraw. Declared before `resize` uses it. */
+	let dirty = true;
+	let running = true;
+	const invalidate = () => {
+		dirty = true;
+	};
 
 	/** A point on the deck surface, with the deck's orientation. */
 	const onDeck = (x: number, t: number, lift = 0): THREE.Vector3 => {
@@ -295,18 +302,51 @@ export async function createMachine3D(
 	const windowSprites: THREE.Sprite[] = [];
 	const captionSprites: THREE.Sprite[] = [];
 	for (let index = 0; index < 3; index += 1) {
-		const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture('A', { background: 'rgba(0,0,0,0)', ink: '#f6f1e6', width: 128, height: 128 }), transparent: true, depthWrite: false }));
-		sprite.scale.set(26, 26, 1);
-		sprite.position.set(index * step - span / 2, RADIUS * 1.12, 10);
+		// A window letter is a printed plate, not a floating label: it gets a backing
+		// and it ignores the depth buffer, so it reads on any drum colour and is
+		// never swallowed by the drum in front of it.
+		const sprite = new THREE.Sprite(
+			new THREE.SpriteMaterial({
+				map: labelTexture('A', { background: '#0d1418', ink: '#ffffff', width: 128, height: 128 }),
+				transparent: true,
+				depthTest: false,
+				depthWrite: false,
+			}),
+		);
+		sprite.scale.set(30, 30, 1);
+		sprite.position.set(index * step - span / 2, RADIUS * 1.16, 14);
+		sprite.renderOrder = 12;
 		machine.add(sprite);
 		windowSprites.push(sprite);
 
-		const caption = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture('I', { background: 'rgba(0,0,0,0)', ink: '#f5b942', width: 192, height: 96 }), transparent: true, depthWrite: false }));
-		caption.scale.set(34, 17, 1);
-		caption.position.set(index * step - span / 2, -RADIUS * 0.1, layout.zFront + 4);
+		const caption = new THREE.Sprite(
+			new THREE.SpriteMaterial({
+				map: labelTexture('I', { background: 'rgba(6,10,14,0.86)', ink: '#ffd166', width: 192, height: 96 }),
+				transparent: true,
+				depthTest: false,
+				depthWrite: false,
+			}),
+		);
+		caption.scale.set(40, 20, 1);
+		caption.position.set(index * step - span / 2, RADIUS * 0.55, layout.zFront + 12);
+		caption.renderOrder = 11;
 		machine.add(caption);
 		captionSprites.push(caption);
 	}
+
+	// The reflector gets a plate too, so its label is not a ghost.
+	const reflectorLabel = new THREE.Sprite(
+		new THREE.SpriteMaterial({
+			map: labelTexture('B', { background: 'rgba(6,10,14,0.86)', ink: '#ffd166', width: 128, height: 128 }),
+			transparent: true,
+			depthTest: false,
+			depthWrite: false,
+		}),
+	);
+	reflectorLabel.scale.set(26, 26, 1);
+	reflectorLabel.position.set(reflector.position.x, RADIUS * 0.9, 10);
+	reflectorLabel.renderOrder = 11;
+	machine.add(reflectorLabel);
 
 	// --- camera fitting ----------------------------------------------------
 	const sphere = new THREE.Box3().setFromObject(machine).getBoundingSphere(new THREE.Sphere());
@@ -339,6 +379,7 @@ export async function createMachine3D(
 		camera.aspect = width2 / height2;
 		camera.updateProjectionMatrix();
 		home.distance = fitDistance();
+		invalidate();
 	};
 	resize();
 	camera.position.copy(home.target).add(new THREE.Vector3(-home.distance * 0.55, home.distance * 0.42, home.distance * 0.72));
@@ -378,11 +419,20 @@ export async function createMachine3D(
 	canvas.addEventListener('pointerdown', onPointerDown);
 	canvas.addEventListener('pointerup', onPointerUp);
 
-	let running = true;
+	// Render on demand, not at 60fps forever: a static machine should cost nothing,
+	// and a phone should stay responsive while you drag it.
+	controls.addEventListener('change', invalidate);
 	const tick = () => {
 		if (!running) return;
-		controls.update();
-		renderer.render(scene, camera);
+		const moved = controls.update();
+		if (moved || dirty) {
+			renderer.render(scene, camera);
+			// A small, honest observable: the view, as the DOM can see it. It costs
+			// nothing and it lets a test (or a person) confirm the camera moved.
+			const spherical = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+			host.dataset.view = `${spherical.theta.toFixed(3)},${spherical.phi.toFixed(3)},${spherical.radius.toFixed(0)}`;
+			dirty = false;
+		}
 		requestAnimationFrame(tick);
 	};
 	requestAnimationFrame(tick);
@@ -398,7 +448,7 @@ export async function createMachine3D(
 				if (sprite.userData.text !== text) {
 					sprite.userData.text = text;
 					sprite.material.map?.dispose();
-					sprite.material.map = labelTexture(text, { background: 'rgba(0,0,0,0)', ink: '#f6f1e6', width: 128, height: 128 });
+					sprite.material.map = labelTexture(text, { background: '#0d1418', ink: '#ffffff', width: 128, height: 128 });
 					sprite.material.needsUpdate = true;
 				}
 			});
@@ -407,7 +457,7 @@ export async function createMachine3D(
 				if (sprite.userData.text !== text) {
 					sprite.userData.text = text;
 					sprite.material.map?.dispose();
-					sprite.material.map = labelTexture(text, { background: 'rgba(0,0,0,0)', ink: '#f5b942', width: 192, height: 96 });
+					sprite.material.map = labelTexture(text, { background: 'rgba(6,10,14,0.86)', ink: '#ffd166', width: 192, height: 96 });
 					sprite.material.needsUpdate = true;
 				}
 			});
@@ -424,6 +474,7 @@ export async function createMachine3D(
 			for (const [letter, socket] of socketMeshes) {
 				socket.material = next.plugged.includes(letter) ? materials.brass : materials.caseTop;
 			}
+			invalidate();
 			const paper = noteFace.material as THREE.MeshStandardMaterial;
 			paper.map?.dispose();
 			paper.map = noteTexture(next.notes);
@@ -435,17 +486,20 @@ export async function createMachine3D(
 			controls.target.set(centreX, layout.deckBottomY + 10, layout.deckBottomZ - 10);
 			camera.position.copy(controls.target).add(new THREE.Vector3(0, 150, 210));
 			controls.update();
+			invalidate();
 		},
 		resetView() {
 			controls.target.copy(home.target);
 			camera.position.copy(home.target).add(new THREE.Vector3(-home.distance * 0.55, home.distance * 0.42, home.distance * 0.72));
 			controls.update();
+			invalidate();
 		},
 		zoomBy(factor) {
 			const offset = camera.position.clone().sub(controls.target);
 			offset.multiplyScalar(1 / factor);
 			camera.position.copy(controls.target).add(offset);
 			controls.update();
+			invalidate();
 		},
 		orbitBy(yaw, pitch) {
 			const offset = camera.position.clone().sub(controls.target);
@@ -454,6 +508,7 @@ export async function createMachine3D(
 			spherical.phi = Math.min(1.42, Math.max(0.15, spherical.phi + pitch));
 			camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(spherical));
 			controls.update();
+			invalidate();
 		},
 		dispose() {
 			running = false;
