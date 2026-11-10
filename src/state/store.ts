@@ -1,4 +1,19 @@
-import { buildMachine, DEFAULT_PRESET_ID, getPreset, keyspace, type EnigmaMachine, type MachinePreset } from '@enigma-lab/core';
+import {
+	buildMachine,
+	createReflectorSpec,
+	createRotorSpec,
+	createRng,
+	DEFAULT_PRESET_ID,
+	generateKey,
+	getPreset,
+	keyspace,
+	randomReflector,
+	randomWiring,
+	type EnigmaMachine,
+	type MachinePreset,
+	type ReflectorSpec,
+	type RotorSpec,
+} from '@enigma-lab/core';
 
 /** Everything the operator can change. Serialisable, and small enough for a URL. */
 export interface LabState {
@@ -13,6 +28,50 @@ export interface LabState {
 	readonly plugboard: readonly (readonly [string, string])[];
 	/** What the operator has typed. */
 	readonly input: string;
+	/** Present when the machine is one the operator invented. */
+	readonly custom?: CustomMachine | undefined;
+}
+
+/**
+ * A machine that never existed: any rotor count up to a hundred, wiring derived
+ * from a seed so it can be shared, and the same constraints the real rotors
+ * obeyed (a derangement, no contact wired to itself).
+ */
+export interface CustomMachine {
+	readonly rotorCount: number;
+	readonly seed: number;
+	/** Notch letters, e.g. `'Q'` or `'ZM'`. */
+	readonly notches: string;
+	readonly reflector: 'random' | 'B' | 'C';
+	readonly alphabet: string;
+}
+
+export const CUSTOM_PRESET_ID = 'custom';
+
+/** Defaults for a home-made machine: three rotors, one notch each. */
+export function defaultCustomMachine(): CustomMachine {
+	return { rotorCount: 3, seed: 1932, notches: 'Q', reflector: 'random', alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' };
+}
+
+/** Builds the rotor and reflector specs for a custom machine, deterministically. */
+export function customSpecs(custom: CustomMachine): { rotors: RotorSpec[]; reflectors: ReflectorSpec[] } {
+	const alphabet = custom.alphabet;
+	const rng = createRng(custom.seed);
+	const rotors: RotorSpec[] = [];
+	for (let index = 0; index < custom.rotorCount; index += 1) {
+		const wiring = randomWiring(alphabet.length, rng);
+		rotors.push({
+			id: `C${index + 1}`,
+			name: `Custom rotor ${index + 1}`,
+			wiring,
+			notches: [...custom.notches].map((letter) => Math.max(0, alphabet.indexOf(letter))),
+		});
+	}
+	const reflectors: ReflectorSpec[] = [];
+	if (custom.reflector === 'random') {
+		reflectors.push({ id: 'R', name: 'Random reflector', wiring: randomReflector(alphabet.length, rng) });
+	}
+	return { rotors, reflectors };
 }
 
 const STORAGE_KEY = 'enigma-lab:v1';
@@ -20,6 +79,19 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** A fresh state for a preset: rotor order and all settings at A. */
 export function stateForPreset(presetId: string = DEFAULT_PRESET_ID): LabState {
+	if (presetId === CUSTOM_PRESET_ID) {
+		const custom = defaultCustomMachine();
+		const ids = Array.from({ length: custom.rotorCount }, (_, index) => `C${index + 1}`);
+		return {
+			presetId: CUSTOM_PRESET_ID,
+			rotorOrder: ids,
+			rings: 'A'.repeat(ids.length),
+			positions: 'A'.repeat(ids.length),
+			plugboard: [],
+			input: '',
+			custom,
+		};
+	}
 	const preset = getPreset(presetId);
 	return {
 		presetId: preset.id,
@@ -52,23 +124,65 @@ export function formatPlugboard(cables: readonly (readonly [string, string])[]):
 
 /** Builds the live machine for a state. Throws only for genuinely invalid input. */
 export function machineFor(state: LabState): EnigmaMachine {
+	const plugboard = state.plugboard.map(([a, b]) => [a, b] as const);
+	if (state.presetId === CUSTOM_PRESET_ID && state.custom) {
+		const { rotors, reflectors } = customSpecs(state.custom);
+		const ids = rotors.map((rotor) => rotor.id);
+		return buildMachine({
+			preset: 'enigma-1',
+			alphabet: state.custom.alphabet,
+			rotorOrder: ids,
+			rotors,
+			reflectors,
+			reflector: state.custom.reflector === 'random' ? 'R' : state.custom.reflector,
+			rings: state.rings,
+			positions: state.positions,
+			plugboard,
+		});
+	}
 	return buildMachine({
 		preset: state.presetId,
 		rotorOrder: [...state.rotorOrder],
 		rings: state.rings,
 		positions: state.positions,
-		plugboard: state.plugboard.map(([a, b]) => [a, b] as const),
+		plugboard,
 	});
 }
 
 /** Key space for the machine the operator has actually configured. */
 export function keyspaceFor(state: LabState) {
+	if (state.presetId === CUSTOM_PRESET_ID && state.custom) {
+		// Every rotor in a home-made machine is unique, so the order count is n!.
+		return keyspace({
+			alphabetSize: state.custom.alphabet.length,
+			rotorPool: state.custom.rotorCount,
+			rotorCount: state.custom.rotorCount,
+			cables: state.plugboard.length,
+		});
+	}
 	const preset: MachinePreset = getPreset(state.presetId);
 	return keyspace({
 		rotorPool: preset.rotorPool.length,
 		rotorCount: state.rotorOrder.length,
 		cables: state.plugboard.length,
+		...(preset.thinRotorChoices ? { thinRotorChoices: preset.thinRotorChoices } : {}),
 	});
+}
+
+/** Rolls a fresh daily key for the current preset, seeded so it can be shared. */
+export function rollKey(state: LabState, seed: number): LabState {
+	const key = generateKey(state.presetId === CUSTOM_PRESET_ID ? 'enigma-1' : state.presetId, { seed });
+	if (state.presetId === CUSTOM_PRESET_ID) {
+		const ids = state.rotorOrder;
+		return { ...state, rings: key.rings.slice(0, ids.length), positions: key.positions.slice(0, ids.length), plugboard: key.plugboard };
+	}
+	return {
+		...state,
+		rotorOrder: [...key.rotorOrder],
+		rings: key.rings,
+		positions: key.positions,
+		plugboard: key.plugboard,
+	};
 }
 
 /** Reads a saved state, falling back to the default preset. */

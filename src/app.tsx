@@ -1,43 +1,63 @@
-import { indexToSymbol, PRESETS } from '@enigma-lab/core';
+import { indexToSymbol, PRESETS, transmit, VERSION } from '@enigma-lab/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { detectRenderer, type RendererReport } from './render/webgpu.js';
-import { encodeHash, keyspaceFor, machineFor, nextLetter, saveState, stateForPreset, type LabState } from './state/store.js';
-import { loadState } from './state/store.js';
+import { detectRenderer } from './render/webgpu.js';
+import { machineGeometry } from './render/theme.js';
+import { MachineStage } from './render/machine-stage.js';
+import {
+	CUSTOM_PRESET_ID,
+	encodeHash,
+	keyspaceFor,
+	loadState,
+	machineFor,
+	nextLetter,
+	rollKey,
+	saveState,
+	stateForPreset,
+	type LabState,
+} from './state/store.js';
+import { Builder, History, KeyspaceExplorer, SignalPanel } from './ui/panels.js';
 import { Controls } from './ui/controls.js';
 import { Keyboard } from './ui/keyboard.js';
-import { Keyspace } from './ui/keyspace.js';
-import { MachineView } from './ui/machine-view.js';
 
-const PRESET_IDS = Object.keys(PRESETS);
+const PRESET_IDS = [...Object.keys(PRESETS), CUSTOM_PRESET_ID];
 
 export function App() {
 	const [state, setState] = useState<LabState>(() => loadState());
-	const [renderer, setRenderer] = useState<RendererReport>({ kind: 'svg', reason: 'detecting' });
+	const [renderer, setRenderer] = useState<'webgpu' | 'svg'>('svg');
+	const [rendererNote, setRendererNote] = useState('detecting');
 	const [theme, setTheme] = useState<'dark' | 'light'>(() =>
 		globalThis.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
 	);
 	const [lit, setLit] = useState<string | null>(null);
+	const [selected, setSelected] = useState<number | null>(null);
+	const [lidOpen, setLidOpen] = useState(true);
+	const [messageKey, setMessageKey] = useState('QWE');
 	const [installable, setInstallable] = useState<{ prompt: () => Promise<void> } | null>(null);
-	const installEvent = useRef<Event | null>(null);
-	const outputRef = useRef<HTMLParagraphElement>(null);
 
 	/** One machine per config: encrypting the input leaves it in a known state. */
 	const run = useMemo(() => {
 		const machine = machineFor(state);
 		const output = machine.encrypt(state.input);
-		return {
-			output,
-			window: machine.window,
-			rotors: machine.rotors.map((rotor, index) => ({
-				id: rotor.spec.id,
-				index,
-				window: indexToSymbol(machine.alphabet, rotor.position),
-				ring: state.rings[index] ?? 'A',
-				atNotch: rotor.atNotch(),
-			})),
-			reflector: machine.reflector.name,
-		};
-	}, [state]);
+		const rotors = machine.rotors.map((rotor, index) => ({
+			id: rotor.spec.id,
+			window: indexToSymbol(machine.alphabet, rotor.position),
+			ring: state.rings[index] ?? 'A',
+			atNotch: rotor.atNotch(),
+		}));
+		const signal = (() => {
+			try {
+				const sender = machineFor(state);
+				const key = messageKey.padEnd(3, 'A').slice(0, 3);
+				const sent = transmit(sender, state.input, { rotorOrder: state.rotorOrder, rings: state.rings, positions: state.positions }, key, {
+					reset: true,
+				});
+				return { indicator: sent.indicator, body: sent.body };
+			} catch {
+				return { indicator: '', body: '' };
+			}
+		})();
+		return { output, window: machine.window, rotors, reflector: machine.reflector.name, signal };
+	}, [state, messageKey]);
 
 	const breakdown = useMemo(() => keyspaceFor(state), [state]);
 
@@ -48,13 +68,16 @@ export function App() {
 	}, [state]);
 
 	useEffect(() => {
-		void detectRenderer().then(setRenderer);
 		document.documentElement.dataset.theme = theme;
 	}, [theme]);
 
 	useEffect(() => {
+		void detectRenderer().then((report) => setRendererNote(report.reason));
+	}, []);
+
+	useEffect(() => {
 		if (!('serviceWorker' in navigator)) return;
-		if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+		if (!globalThis.isSecureContext) return;
 		navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {
 			// Offline support is a bonus, never a requirement.
 		});
@@ -63,7 +86,6 @@ export function App() {
 	useEffect(() => {
 		const onInstall = (event: Event) => {
 			event.preventDefault();
-			installEvent.current = event;
 			setInstallable({ prompt: async () => void (await (event as unknown as { prompt(): Promise<void> }).prompt()) });
 		};
 		globalThis.addEventListener('beforeinstallprompt', onInstall);
@@ -105,13 +127,48 @@ export function App() {
 		return () => clearTimeout(timer);
 	}, [lit]);
 
-	const reset = () => setState({ ...stateForPreset(state.presetId) });
-
 	const stepRotor = (index: number) => {
+		setSelected(index);
 		const chars = [...state.positions];
 		chars[index] = nextLetter(chars[index] ?? 'A');
 		setState({ ...state, positions: chars.join('') });
 	};
+
+	const swapRotor = (index: number, direction: -1 | 1) => {
+		const target = index + direction;
+		if (target < 0 || target >= state.rotorOrder.length) return;
+		const order = [...state.rotorOrder];
+		const [moved] = order.splice(index, 1);
+		if (!moved) return;
+		order.splice(target, 0, moved);
+		setSelected(target);
+		setState({ ...state, rotorOrder: order });
+	};
+
+	const rotorRow = selected === null ? null : (
+		<div class="rotor-actions" role="group" aria-label={`Rotor ${selected + 1}`}>
+			<span>
+				Rotor {selected + 1}: {run.rotors[selected]?.id ?? ''}
+			</span>
+			<button type="button" class="button button--ghost" onClick={() => stepRotor(selected)}>
+				Step
+			</button>
+			<button type="button" class="button button--ghost" onClick={() => swapRotor(selected, -1)} disabled={selected === 0}>
+				←
+			</button>
+			<button
+				type="button"
+				class="button button--ghost"
+				onClick={() => swapRotor(selected, 1)}
+				disabled={selected === state.rotorOrder.length - 1}
+			>
+				→
+			</button>
+			<button type="button" class="button button--ghost" onClick={() => setSelected(null)}>
+				Done
+			</button>
+		</div>
+	);
 
 	return (
 		<div class="app">
@@ -119,8 +176,8 @@ export function App() {
 				<div>
 					<h1>Enigma Lab</h1>
 					<p class="masthead__sub">
-						A working machine, not a picture of one. Every key press steps the rotors, crosses the reflector and comes
-						back through the plugboard.
+						A working machine, not a picture of one. Every key press steps the rotors, crosses the reflector and comes back
+						through the plugboard.
 					</p>
 				</div>
 				<div class="masthead__actions">
@@ -141,12 +198,18 @@ export function App() {
 			</header>
 
 			<main>
-				<MachineView
+				<MachineStage
 					rotors={run.rotors}
 					reflectorLabel={run.reflector}
-					onSelect={stepRotor}
-					label={`Enigma machine with ${run.rotors.length} rotors showing ${run.window}`}
+					geometry={machineGeometry}
+					onSelectRotor={stepRotor}
+					selected={selected}
+					lidOpen={lidOpen}
+					onToggleLid={() => setLidOpen(!lidOpen)}
+					rendererKind={renderer}
+					onRendererChange={setRenderer}
 				/>
+				{rotorRow}
 
 				<section class="panel panel--io" aria-labelledby="io-heading">
 					<h2 id="io-heading">Message</h2>
@@ -162,55 +225,57 @@ export function App() {
 					</label>
 					<div class="output">
 						<span class="output__label">Lampboard</span>
-						<p class="output__text" ref={outputRef} aria-live="polite">
+						<p class="output__text" aria-live="polite">
 							{run.output || '—'}
 						</p>
-						<button
-							type="button"
-							class="button button--ghost"
-							disabled={!run.output}
-							onClick={() => void navigator.clipboard?.writeText(run.output)}
-						>
+						<button type="button" class="button button--ghost" disabled={!run.output} onClick={() => void navigator.clipboard?.writeText(run.output)}>
 							Copy
 						</button>
 					</div>
 					<p class="io__note">
-						Enigma is reciprocal: put the cipher text back in with the same settings and the same start positions and
-						the plain text returns. Start positions here: <strong>{state.positions}</strong>, window now{' '}
-						<strong>{run.window}</strong>.
+						Enigma is reciprocal: put the cipher text back in with the same settings and start positions and the plain text
+						returns. Start positions <strong>{state.positions}</strong>, window now <strong>{run.window}</strong>.
 					</p>
 				</section>
 
 				<Keyboard onKey={press} onBackspace={backspace} lit={lit} />
 
-				<Controls state={state} onChange={setState} presetIds={PRESET_IDS} onReset={reset} />
+				<Controls
+					state={state}
+					onChange={setState}
+					presetIds={PRESET_IDS}
+					onReset={() => setState({ ...stateForPreset(state.presetId) })}
+					onRollKey={() => setState(rollKey(state, Math.floor(Math.random() * 99999) + 1))}
+				/>
 
-				<Keyspace breakdown={breakdown} cables={state.plugboard.length} />
+				{state.presetId === CUSTOM_PRESET_ID ? <Builder state={state} onChange={setState} /> : null}
 
-				<section class="panel" aria-labelledby="history-heading">
-					<h2 id="history-heading">Who actually broke it</h2>
-					<p>
-						The machine was never defeated by arithmetic. In 1932 the Polish Cipher Bureau handed the problem to three
-						young mathematicians from Poznań — Marian Rejewski, Jerzy Różycki and Henryk Zygalski — and Rejewski
-						reconstructed the military wiring from intercepted indicators before the end of that year. Różycki's clock
-						method and Zygalski's perforated sheets carried the attack forward, and in July 1939 the Poles handed
-						everything they had to British and French intelligence.
-					</p>
-					<p>
-						At Bletchley Park, Alan Turing and Gordon Welchman turned that inheritance into the bombe, with Harold
-						Keen's engineers at BTM building it. Hut 6 attacked army and air force traffic, Hut 8 the naval traffic.
-						The rotors, notches and reflectors in this simulator follow the published measurements of the machines
-						themselves.
-					</p>
+				<section class="panel" aria-labelledby="signal-heading">
+					<h2 id="signal-heading">As a signal</h2>
+					<label class="field">
+						<span>Message key</span>
+						<input
+							type="text"
+							maxLength={3}
+							value={messageKey}
+							onInput={(event) => setMessageKey((event.target as HTMLInputElement).value.toUpperCase().replace(/[^A-Z]/g, ''))}
+						/>
+					</label>
+					<SignalPanel indicator={run.signal.indicator} body={run.signal.body} messageKey={messageKey} />
 				</section>
+
+				<KeyspaceExplorer state={state} />
+
+				<History />
 			</main>
 
 			<footer class="footer">
 				<p>
-					Rendering: <strong>{renderer.kind === 'webgpu' ? 'WebGPU' : 'SVG'}</strong> · {renderer.reason}
+					Rendering: <strong>{renderer === 'webgpu' ? 'WebGPU' : 'SVG'}</strong> · {rendererNote} · core v{VERSION}
 				</p>
 				<p>
-					Core maths from <code>@enigma-lab/core</code>. Nothing leaves your device; there is no server to send it to.
+					Nothing leaves your device; there is no server to send it to. Settings live in <code>localStorage</code> and in the
+					URL hash.
 				</p>
 			</footer>
 		</div>
