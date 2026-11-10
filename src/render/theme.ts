@@ -19,9 +19,9 @@ export const labTheme: RenderTheme = {
 
 /** Machine dimensions in user units, tuned for a phone held in one hand. */
 export const machineGeometry: MachineGeometry = {
-	radius: 44,
+	radius: 40,
 	thickness: 14,
-	gap: 10,
-	casePadding: 10,
-	reflectorGap: 16,
+	gap: 14,
+	casePadding: 12,
+	reflectorGap: 34,
 };

@@ -9,6 +9,9 @@
 	--rotor: #22303e;
 	--rotor-ring: #2b3b4c;
 	--rotor-notch: #3d3220;
+	--key: #1b2430;
+	--lamp: #2b3b4c;
+	--deck: #202b38;
 	--edge: #26313e;
 	--edge-strong: #35455a;
 	--wire: #4a5b6d;
@@ -35,6 +38,9 @@
 	--rotor: #dcd3c1;
 	--rotor-ring: #cbc0a9;
 	--rotor-notch: #f0dfb4;
+	--key: #f2ece0;
+	--lamp: #cfc4ae;
+	--deck: #e9e3d5;
 	--edge: #d9d1c0;
 	--edge-strong: #b9ad96;
 	--wire: #8a7f6b;
@@ -57,6 +63,9 @@
 	--rotor: #d6c39c;
 	--rotor-ring: #c7b28a;
 	--rotor-notch: #f2dfa9;
+	--key: #f6ecd6;
+	--lamp: #d3c19b;
+	--deck: #e6d8b9;
 	--edge: #d3c2a0;
 	--edge-strong: #b09a72;
 	--wire: #8a7452;
@@ -79,6 +88,9 @@
 	--rotor: #000;
 	--rotor-ring: #1a1a1a;
 	--rotor-notch: #2a2200;
+	--key: #111;
+	--lamp: #222;
+	--deck: #0d0d0d;
 	--edge: #fff;
 	--edge-strong: #fff;
 	--wire: #fff;
@@ -305,7 +317,7 @@ main {
 .machine__stage {
 	position: relative;
 	width: 100%;
-	aspect-ratio: 9 / 5;
+	aspect-ratio: 5 / 3;
 	max-height: 34vh;
 	margin-inline: auto;
 	touch-action: none;
@@ -378,7 +390,9 @@ main {
 }
 
 .machine__case {
-	fill: var(--case);
+	/* The discs and the case surface are drawn on the canvas; this is the outline
+	   and the rounded silhouette, so it must not paint over them. */
+	fill: transparent;
 	stroke: var(--edge-strong);
 	stroke-width: 1.5;
 }
@@ -400,10 +414,16 @@ main {
 	stroke-width: 2.5;
 }
 
-.rotor__ring {
-	fill: var(--rotor-ring);
-	stroke: var(--wire);
-	stroke-width: 1;
+.rotor__hit {
+	fill: transparent;
+	stroke: transparent;
+	stroke-width: 0;
+}
+
+.rotor--selected .rotor__hit {
+	fill: none;
+	stroke: var(--accent);
+	stroke-width: 2.5;
 }
 
 .rotor__notch {
@@ -1286,8 +1306,8 @@ input[type='range']::-moz-range-thumb {
 	}
 
 	.machine__stage {
-		aspect-ratio: 2 / 1;
-		max-height: 42vh;
+		aspect-ratio: 12 / 5;
+		max-height: 40vh;
 	}
 
 	.machine__stage--3d {
@@ -1312,4 +1332,87 @@ input[type='range']::-moz-range-thumb {
 	.machine__stage--3d {
 		aspect-ratio: 2 / 1;
 	}
+}
+
+/* Install banner -------------------------------------------------------- */
+
+.install {
+	position: static;
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	max-width: 34rem;
+	margin-inline: auto;
+	padding: 0.7rem 0.8rem;
+	background: var(--panel-raised);
+	border: 1px solid var(--edge-strong);
+	border-radius: var(--radius);
+	box-shadow: 0 18px 40px -18px rgb(0 0 0 / 60%);
+	animation: install-in 260ms var(--ease);
+}
+
+@keyframes install-in {
+	from {
+		opacity: 0;
+		translate: 0 12px;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+
+.install__icon {
+	display: grid;
+	place-items: center;
+	width: 2.2rem;
+	height: 2.2rem;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+
+.install p {
+	margin: 0;
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	line-height: 1.35;
+	min-width: 0;
+}
+
+.install p strong {
+	font-size: 0.9rem;
+}
+
+.install p span {
+	color: var(--ink-dim);
+	font-size: 0.78rem;
+}
+
+.install .button {
+	flex: 0 0 auto;
+}
+
+@media (max-width: 30rem) {
+	.install {
+		flex-wrap: wrap;
+	}
+
+	.install p {
+		flex-basis: 60%;
+	}
+}
+
+@media (min-width: 48rem) {
+	.install {
+		position: fixed;
+		inset: auto 0.75rem 0.75rem;
+	}
+}
+
+:root[data-motion='off'] .install {
+	animation: none;
 }
