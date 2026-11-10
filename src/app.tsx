@@ -1,15 +1,19 @@
-import { indexToSymbol, PRESETS, transmit, VERSION } from '@enigma-lab/core';
+import { formatKeyspace, indexToSymbol, PRESETS, transmit, VERSION } from '@enigma-lab/core';
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
-import { FormMode } from './modes/form.js';
+import { Keypad } from './modes/keypad.js';
 import { ThreeDMode } from './modes/three-d-mode.js';
-import { CUSTOM_PRESET_ID, encodeHash, keyspaceFor, loadState, machineFor, nextLetter, rollKey, saveState, type LabState } from './state/store.js';
+import { CUSTOM_PRESET_ID, encodeHash, keyspaceFor, loadState, machineFor, nextLetter, rollKey, saveState, stateForPreset, type LabState } from './state/store.js';
 import { applyTheme, loadPrefs, savePrefs, type Mode, type Prefs } from './state/prefs.js';
-import { Settings } from './ui/settings.js';
+import { Builder, KeyspaceExplorer, SignalPanel } from './ui/panels.js';
+import { Controls } from './ui/controls.js';
+import { IconChart, IconClear, IconCopy, IconGears, IconKeyboard, IconSignal, IconWheels } from './ui/icons.js';
 import { InstallBanner } from './ui/install.js';
+import { Settings } from './ui/settings.js';
+import { Sheet } from './ui/sheet.js';
 
 const PRESET_IDS = [...Object.keys(PRESETS), CUSTOM_PRESET_ID];
+type SheetId = 'keys' | 'space' | 'signal' | 'message';
 
-/** Rotor order, rings and start positions, in the shape the procedures want. */
 function dailyKey(state: LabState) {
 	return { rotorOrder: [...state.rotorOrder], rings: state.rings, positions: state.positions };
 }
@@ -17,13 +21,13 @@ function dailyKey(state: LabState) {
 export function App() {
 	const [state, setState] = useState<LabState>(() => loadState());
 	const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
-	const [formBackend, setFormBackend] = useState('detecting');
+	const [backend, setBackend] = useState('detecting');
 	const [lit, setLit] = useState<string | null>(null);
 	const [selected, setSelected] = useState<number | null>(null);
 	const [lidOpen, setLidOpen] = useState(true);
 	const [messageKey, setMessageKey] = useState('QWE');
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [backend, setBackend] = useState('detecting');
+	const [sheet, setSheet] = useState<SheetId | null>(null);
 	const [pendingPlug, setPendingPlug] = useState<string | null>(null);
 
 	const mode: Mode = prefs.mode;
@@ -69,21 +73,6 @@ export function App() {
 		});
 	}, []);
 
-	/** Tapping a socket twice cancels; tapping two different ones plugs them together. */
-	const plug = (letter: string) => {
-		if (!pendingPlug) {
-			setPendingPlug(letter);
-			return;
-		}
-		if (pendingPlug === letter) {
-			setPendingPlug(null);
-			return;
-		}
-		const existing = state.plugboard.filter((pair) => !pair.includes(letter) && !pair.includes(pendingPlug));
-		setState({ ...state, plugboard: [...existing, [pendingPlug, letter] as const] });
-		setPendingPlug(null);
-	};
-
 	const press = useCallback((letter: string) => {
 		setState((current) => ({ ...current, input: `${current.input}${letter}`.slice(0, 400) }));
 		setLit(letter);
@@ -97,8 +86,6 @@ export function App() {
 		const onKeyDown = (event: KeyboardEvent) => {
 			const target = event.target as HTMLElement | null;
 			if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-			// Letters still reach the machine while the 3D stage has focus; only the
-			// stage's own arrow and zoom keys are handled there.
 			if (event.metaKey || event.ctrlKey || event.altKey) return;
 			const letter = event.key.toUpperCase();
 			if (/^[A-Z]$/.test(letter)) {
@@ -128,6 +115,20 @@ export function App() {
 		setState({ ...state, positions: chars.join('') });
 	};
 
+	const plug = (letter: string) => {
+		if (!pendingPlug) {
+			setPendingPlug(letter);
+			return;
+		}
+		if (pendingPlug === letter) {
+			setPendingPlug(null);
+			return;
+		}
+		const kept = state.plugboard.filter((pair) => !pair.includes(letter) && !pair.includes(pendingPlug));
+		setState({ ...state, plugboard: [...kept, [pendingPlug, letter] as const] });
+		setPendingPlug(null);
+	};
+
 	const shared = {
 		state,
 		onChange: setState,
@@ -143,61 +144,61 @@ export function App() {
 	};
 
 	return (
-		<div class="app">
-			<a class="skip-link" href="#main">
-				Skip to the machine
+		<div class="app" data-mode={mode}>
+			<a class="skip-link" href="#pad">
+				Skip to the keys
 			</a>
 
-			<header class="masthead">
-				<div class="masthead__brand">
-					<span class="masthead__mark" aria-hidden="true">
-						<svg viewBox="0 0 32 32" width="28" height="28">
-							<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2" />
-							<circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6" />
-							<circle cx="16" cy="16" r="2" fill="currentColor" />
-							<path d="M16 5v3M16 24v3M5 16h3M24 16h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+			<header class="bar">
+				<div class="bar__brand">
+					<span class="bar__mark" aria-hidden="true">
+						<svg viewBox="0 0 32 32" width="22" height="22">
+							<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.5" />
+							<circle cx="16" cy="16" r="3.4" fill="currentColor" />
+							<path d="M16 5v3.4M16 23.6V27M5 16h3.4M23.6 16H27" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
 						</svg>
 					</span>
-					<div>
-						<h1>Enigma Lab</h1>
-						<p class="masthead__sub">A working machine, not a picture of one.</p>
-					</div>
+					<h1 class="bar__title">Enigma Lab</h1>
 				</div>
 
-				<nav class="nav" aria-label="Sections">
-					<a href="./" aria-current="page">
-						Machine
-					</a>
-					<a href="./about.html">About</a>
-					<a href="./facts.html">Fun facts</a>
-				</nav>
-
-				<div class="masthead__actions">
-					<div class="switch" role="group" aria-label="Interface">
-						<button type="button" aria-pressed={mode === 'form'} class={mode === 'form' ? 'switch__option is-on' : 'switch__option'} onClick={() => setPrefs({ ...prefs, mode: 'form' })}>
-							Form
-						</button>
-						<button type="button" aria-pressed={mode === '3d'} class={mode === '3d' ? 'switch__option is-on' : 'switch__option'} onClick={() => setPrefs({ ...prefs, mode: '3d' })}>
-							3D
-						</button>
-					</div>
-					<button type="button" class="button button--ghost" aria-haspopup="dialog" onClick={() => setSettingsOpen(true)}>
-						Settings
+				<div class="switch" role="group" aria-label="Interface">
+					<button type="button" aria-pressed={mode === 'form'} class={mode === 'form' ? 'switch__option is-on' : 'switch__option'} onClick={() => setPrefs({ ...prefs, mode: 'form' })}>
+						Keys
+					</button>
+					<button type="button" aria-pressed={mode === '3d'} class={mode === '3d' ? 'switch__option is-on' : 'switch__option'} onClick={() => setPrefs({ ...prefs, mode: '3d' })}>
+						3D
 					</button>
 				</div>
+
+				<button type="button" class="icon-button" aria-haspopup="dialog" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
+					<IconGears />
+				</button>
 			</header>
 
-			<main id="main">
+			<section class="display" aria-label="Machine readout">
+				<div class="display__meta">
+					<span class="display__window">{run.window}</span>
+					<span class="display__bits">{breakdown.bits.toFixed(1)} bits</span>
+				</div>
+				<p class="display__input" aria-hidden="true">
+					{state.input || 'Type a letter'}
+				</p>
+				<div class="display__row">
+					<p class="display__out" aria-live="polite" aria-label="Lampboard">
+						{run.output || '—'}
+					</p>
+					<button type="button" class="icon-button icon-button--onDark" disabled={!state.input} onClick={() => setState({ ...state, input: '' })} aria-label="Clear">
+						<IconClear />
+					</button>
+					<button type="button" class="icon-button icon-button--onDark" disabled={!run.output} onClick={() => void navigator.clipboard?.writeText(run.output)} aria-label="Copy output">
+						<IconCopy />
+					</button>
+				</div>
+			</section>
+
+			<main class="stage" id="pad">
 				{mode === 'form' ? (
-					<FormMode
-						{...shared}
-						presetIds={PRESET_IDS}
-						preference={prefs.renderer}
-						onBackend={setFormBackend}
-						messageKey={messageKey}
-						onMessageKey={setMessageKey}
-						onRollKey={() => setState(rollKey(state, Math.floor(Math.random() * 99999) + 1))}
-					/>
+					<Keypad wheels={run.rotors} lit={lit} onPress={press} onBackspace={backspace} onStep={stepRotor} />
 				) : (
 					<ThreeDMode
 						{...shared}
@@ -210,19 +211,81 @@ export function App() {
 				)}
 			</main>
 
-			<footer class="footer">
-				<p>
-					<strong>{mode === '3d' ? backend : formBackend}</strong> · core v{VERSION}
+			<nav class="toolbar" aria-label="Machine settings">
+				<button type="button" class="tool" onClick={() => setSheet('keys')}>
+					<IconWheels />
+					<span>Set-up</span>
+				</button>
+				<button type="button" class="tool" onClick={() => setSheet('space')}>
+					<IconChart />
+					<span>Space</span>
+				</button>
+				<button type="button" class="tool" onClick={() => setSheet('signal')}>
+					<IconSignal />
+					<span>Signal</span>
+				</button>
+				<button type="button" class="tool" onClick={() => setSheet('message')}>
+					<IconKeyboard />
+					<span>Text</span>
+				</button>
+			</nav>
+
+			<Sheet open={sheet === 'keys'} title="Key sheet" onClose={() => setSheet(null)}>
+				<Controls
+					state={state}
+					onChange={setState}
+					presetIds={PRESET_IDS}
+					onReset={() => setState({ ...stateForPreset(state.presetId), input: state.input })}
+					onRollKey={() => setState(rollKey(state, Math.floor(Math.random() * 99999) + 1))}
+				/>
+				{state.presetId === CUSTOM_PRESET_ID ? <Builder state={state} onChange={setState} /> : null}
+			</Sheet>
+
+			<Sheet open={sheet === 'space'} title="Key space" onClose={() => setSheet(null)}>
+				<KeyspaceExplorer state={state} breakdown={breakdown} total={formatKeyspace(breakdown)} />
+			</Sheet>
+
+			<Sheet open={sheet === 'signal'} title="As a signal" onClose={() => setSheet(null)}>
+				<label class="field field--row">
+					<span>Message key</span>
+					<input
+						type="text"
+						maxLength={3}
+						value={messageKey}
+						onInput={(event) => setMessageKey((event.target as HTMLInputElement).value.toUpperCase().replace(/[^A-Z]/g, ''))}
+					/>
+				</label>
+				<SignalPanel indicator={run.signal.indicator} body={run.signal.body} messageKey={messageKey} />
+			</Sheet>
+
+			<Sheet open={sheet === 'message'} title="Message" onClose={() => setSheet(null)}>
+				<label class="field">
+					<span>Plain or cipher text</span>
+					<textarea
+						rows={5}
+						value={state.input}
+						spellcheck={false}
+						autocapitalize="characters"
+						placeholder="Type, or use the keys"
+						onInput={(event) => setState({ ...state, input: (event.target as HTMLTextAreaElement).value.toUpperCase() })}
+					/>
+				</label>
+				<p class="io__note">
+					Enigma is reciprocal: put the cipher text back in with the same settings and start positions and the plain text returns.
+					Start <strong>{state.positions}</strong>, window now <strong>{run.window}</strong>.
 				</p>
-				<p>
-					Nothing leaves your device; there is no server to send it to. The machine lives in the URL, your preferences stay
-					here.
-				</p>
-			</footer>
+				<button type="button" class="button" onClick={() => setState({ ...state, input: run.output })} disabled={!run.output}>
+					Swap input and output
+				</button>
+			</Sheet>
 
 			<InstallBanner />
 
 			<Settings prefs={prefs} onChange={setPrefs} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+			<p class="colophon">
+				<strong>{mode === '3d' ? backend : 'keys'}</strong> · core v{VERSION}
+			</p>
 		</div>
 	);
 }
