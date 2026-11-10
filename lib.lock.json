@@ -1,0 +1,13 @@
+{
+	"$comment": "The website bundles exactly this release of the core library. scripts/fetch-lib.mjs refuses to build if the tarball does not match the sha256 below.",
+	"name": "@enigma-lab/core",
+	"version": "0.1.0",
+	"repo": "indpriyanshuraj-bot/enigma-core",
+	"tag": "v0.1.0",
+	"url": "https://github.com/indpriyanshuraj-bot/enigma-core/releases/download/v0.1.0/enigma-lab-core-0.1.0.tgz",
+	"sha256": "1f69502b91089d38ed17eeb13c4d3292ec020b09baea670cba9b7285f996b157",
+	"files": {
+		"@enigma-lab/core": "dist/index.js",
+		"@enigma-lab/core/render": "dist/render.js"
+	}
+}
