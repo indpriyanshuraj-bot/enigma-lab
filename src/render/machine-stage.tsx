@@ -1,6 +1,7 @@
 import { buildMachineScene, hitTestScene, type Camera, type MachineGeometry, type SceneRotor } from '@enigma-lab/core/render';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { createGpuMachine, paletteFromCss, type GpuMachine } from './webgpu-machine.js';
+import { createSurface, type Point, type Surface, type Triangle } from './surface.js';
+import { parseColour } from './colour.js';
 
 export interface MachineStageProps {
 	readonly rotors: readonly SceneRotor[];
@@ -10,28 +11,43 @@ export interface MachineStageProps {
 	readonly selected: number | null;
 	readonly lidOpen: boolean;
 	readonly onToggleLid: () => void;
-	readonly rendererKind: 'webgpu' | 'svg';
-	readonly onRendererChange: (kind: 'webgpu' | 'svg') => void;
+	readonly onBackend: (backend: string) => void;
+	readonly preference: 'auto' | 'webgpu' | 'webgl' | 'canvas';
 }
 
 const VIEWPORT = { width: 360, height: 200 };
 const DEFAULT_CAMERA: Camera = { yaw: 0.14, pitch: 0.95, zoom: 1, origin: { x: 180, y: 100 } };
 
+function colours(): { body: string; notch: string; ring: string; edge: string } {
+	const style = getComputedStyle(document.documentElement);
+	const read = (name: string, fallback: string): string => {
+		const value = style.getPropertyValue(name).trim();
+		return parseColour(value) ? value : fallback;
+	};
+	return {
+		body: read('--rotor', '#22303e'),
+		notch: read('--rotor-notch', '#3d3220'),
+		ring: read('--rotor-ring', '#2b3b4c'),
+		edge: read('--edge-strong', '#35455a'),
+	};
+}
+
 /**
- * The machine, drawn from the library's scene.
+ * The top-down machine.
  *
- * WebGPU rasterises the rotor discs when the device allows it; SVG draws the
- * letters, captions, focus rings and the lid, and it takes the pointer events.
- * That split is deliberate: the interactive surface is ordinary DOM, so it stays
- * keyboard-reachable and works with a screen reader whichever backend painted
- * the discs.
+ * The discs are rasterised by the shared surface — WebGPU, WebGL2 or a 2D canvas
+ * — and everything that must be read, focused or announced stays in SVG on top:
+ * window letters, ring captions, the notch marker, the lid, and one focusable
+ * button per rotor.
  */
 export function MachineStage(props: MachineStageProps) {
-	const { rotors, reflectorLabel, geometry, selected, lidOpen, onSelectRotor, onToggleLid, rendererKind, onRendererChange } = props;
+	const { rotors, reflectorLabel, geometry, selected, lidOpen, onSelectRotor, onToggleLid, preference } = props;
 	const [camera, setCamera] = useState<Camera>(DEFAULT_CAMERA);
-	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const geometryRef = useRef<HTMLCanvasElement>(null);
 	const hostRef = useRef<HTMLDivElement>(null);
-	const gpuRef = useRef<GpuMachine | null>(null);
+	const surfaceRef = useRef<Surface | null>(null);
+	// Bumped when the surface finishes initialising, so the first frame is drawn.
+	const [surfaceReady, setSurfaceReady] = useState(0);
 	const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number; moved: number } | null>(null);
 
 	const scene = useMemo(
@@ -39,34 +55,75 @@ export function MachineStage(props: MachineStageProps) {
 		[rotors, reflectorLabel, geometry, camera],
 	);
 
-	// One GPU context for the lifetime of the stage.
 	useEffect(() => {
 		let cancelled = false;
-		const canvas = canvasRef.current;
+		const canvas = geometryRef.current;
 		if (!canvas) return;
-		void createGpuMachine(canvas).then((machine) => {
+		void createSurface(canvas, preference).then((surface) => {
 			if (cancelled) {
-				machine?.dispose();
+				surface.dispose();
 				return;
 			}
-			gpuRef.current = machine;
-			onRendererChange(machine ? 'webgpu' : 'svg');
+			surfaceRef.current = surface;
+			setSurfaceReady((value) => value + 1);
+			props.onBackend(`${surface.backend}: ${surface.reason}`);
 		});
 		return () => {
 			cancelled = true;
-			gpuRef.current?.dispose();
-			gpuRef.current = null;
+			surfaceRef.current?.dispose();
+			surfaceRef.current = null;
 		};
-	}, [onRendererChange]);
+	}, [preference]);
 
-	// Draw whenever the scene or the theme changes.
 	useEffect(() => {
-		const machine = gpuRef.current;
+		const surface = surfaceRef.current;
 		const host = hostRef.current;
-		if (!machine || !host) return;
+		if (!surface || !host) return;
 		const rect = host.getBoundingClientRect();
-		machine.draw(scene, paletteFromCss(), rect.width || VIEWPORT.width, rect.height || VIEWPORT.height);
-	}, [scene, rendererKind]);
+		const width = Math.max(rect.width, 1);
+		const height = Math.max(rect.height, 1);
+		surface.resize(width, height, Math.min(globalThis.devicePixelRatio || 1, 2));
+
+		const spanX = Math.max(scene.bounds.maxX - scene.bounds.minX, 1);
+		const spanY = Math.max(scene.bounds.maxY - scene.bounds.minY, 1);
+		const toScreen = (x: number, y: number): Point => ({
+			x: ((x - scene.bounds.minX) / spanX) * width,
+			y: ((y - scene.bounds.minY) / spanY) * height,
+		});
+
+		const palette = colours();
+		const squash = Math.abs(Math.sin(camera.pitch)) || 0.6;
+		const triangles: Triangle[] = [];
+
+		const disc = (cx: number, cy: number, radius: number, colour: string, segments = 40): void => {
+			const rgb = parseColour(colour) ?? [0.5, 0.5, 0.5];
+			const centre = toScreen(cx, cy);
+			for (let index = 0; index < segments; index += 1) {
+				const a = (index / segments) * Math.PI * 2;
+				const b = ((index + 1) / segments) * Math.PI * 2;
+				triangles.push({
+					a: centre,
+					b: toScreen(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius * squash),
+					c: toScreen(cx + Math.cos(b) * radius, cy + Math.sin(b) * radius * squash),
+					colour: [rgb[0], rgb[1], rgb[2]],
+				});
+			}
+		};
+
+		for (let index = scene.rotors.length - 1; index >= 0; index -= 1) {
+			const rotor = scene.rotors[index];
+			if (!rotor) continue;
+			// A rim first, then the body: a flat fill alone reads as a smudge.
+			disc(rotor.center.x, rotor.center.y, rotor.slot.radius, palette.edge);
+			disc(rotor.center.x, rotor.center.y, rotor.slot.radius - 1.6, rotor.atNotch ? palette.notch : palette.body);
+			disc(rotor.center.x, rotor.center.y, rotor.slot.radius * 0.62, palette.ring, 32);
+			disc(rotor.center.x, rotor.center.y, rotor.slot.radius * 0.62 - 1.2, rotor.atNotch ? palette.notch : palette.body, 32);
+		}
+		disc(scene.reflector.center.x, scene.reflector.center.y, scene.reflector.radius, palette.edge, 28);
+		disc(scene.reflector.center.x, scene.reflector.center.y, scene.reflector.radius - 1.6, palette.ring, 28);
+
+		surface.draw(triangles);
+	}, [scene, camera, preference, surfaceReady]);
 
 	const onPointerDown = (event: PointerEvent) => {
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
@@ -115,7 +172,7 @@ export function MachineStage(props: MachineStageProps) {
 					setCamera({ ...camera, zoom: Math.min(2.2, Math.max(0.6, camera.zoom - event.deltaY * 0.001)) });
 				}}
 			>
-				<canvas ref={canvasRef} class="machine__gpu" aria-hidden="true" />
+				<canvas ref={geometryRef} class="machine__gpu" aria-hidden="true" />
 				<svg
 					class="machine__overlay"
 					viewBox={`${scene.bounds.minX} ${scene.bounds.minY} ${Math.max(scene.bounds.maxX - scene.bounds.minX, 1)} ${Math.max(
@@ -131,20 +188,7 @@ export function MachineStage(props: MachineStageProps) {
 						{scene.reflector.label}
 					</text>
 
-					{rendererKind === 'svg'
-						? [...scene.rotors].reverse().map((rotor) => (
-								<ellipse
-									key={`disc-${rotor.index}`}
-									class={rotor.atNotch ? 'disc disc--notch' : 'disc'}
-									cx={rotor.center.x}
-									cy={rotor.center.y}
-									rx={rotor.slot.radius}
-									ry={rotor.slot.radius * Math.abs(Math.sin(camera.pitch))}
-								/>
-							))
-						: null}
-
-					{lidOpen ? scene.rotors.map((rotor) => (
+					{scene.rotors.map((rotor) => (
 						<g
 							key={`${rotor.id}-${rotor.index}`}
 							class={selected === rotor.index ? 'rotor rotor--selected' : 'rotor'}
@@ -159,7 +203,7 @@ export function MachineStage(props: MachineStageProps) {
 								}
 							}}
 						>
-							<circle class="rotor__ring" cx={rotor.center.x} cy={rotor.center.y} r={rotor.slot.radius * 0.62} />
+							<circle class="rotor__hit" cx={rotor.center.x} cy={rotor.center.y} r={rotor.slot.radius} />
 							<circle class="rotor__notch" cx={rotor.notch.x} cy={rotor.notch.y} r={3} />
 							<text class="rotor__letter" x={rotor.center.x} y={rotor.center.y + 1}>
 								{rotor.window}
@@ -168,15 +212,22 @@ export function MachineStage(props: MachineStageProps) {
 								{rotor.id} · {rotor.ring}
 							</text>
 						</g>
-					)) : null}
+					))}
 
 					{lidOpen ? null : (
-						<g class="lid" role="button" tabindex={0} aria-label="Lift the lid" onClick={onToggleLid} onKeyDown={(event) => {
-							if (event.key === 'Enter' || event.key === ' ') {
-								event.preventDefault();
-								onToggleLid();
-							}
-						}}>
+						<g
+							class="lid"
+							role="button"
+							tabindex={0}
+							aria-label="Lift the lid"
+							onClick={onToggleLid}
+							onKeyDown={(event) => {
+								if (event.key === 'Enter' || event.key === ' ') {
+									event.preventDefault();
+									onToggleLid();
+								}
+							}}
+						>
 							<rect class="lid__panel" x={scene.case.x + 4} y={scene.case.y + 4} width={scene.case.width - 8} height={scene.case.height - 8} rx={scene.case.radius} />
 							<text class="lid__label" x={scene.case.x + scene.case.width / 2} y={scene.case.y + scene.case.height / 2}>
 								Lift the lid
