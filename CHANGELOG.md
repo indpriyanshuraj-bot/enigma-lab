@@ -4,6 +4,30 @@ All notable changes to the site are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning, and each tag is a deployable snapshot of `dist/`.
 
+## [0.6.0] - 2026-11-10
+
+### Changed
+
+- **Text is geometry.** Every letter on the machine — window letters, key legends, socket
+  letters, the reflector label, the operator's note — is emitted as quads in the scene, so it
+  foreshortens with the camera, sorts with the parts and is occluded by them. The 2D overlay
+  is gone, and with it the class of bug where a label drifted out of register.
+- **Four backends, one ladder.** WebGPU, then WebGL2, then WebGL1, then SVG polygons. The
+  same triangle list goes to whichever one answers; nothing is drawn by one path and missed
+  by another.
+- The camera fits the machine's bounding sphere instead of guessing from the window shape, so
+  zoom works at any size and survives a rotation of the device.
+- The deck is tiled rather than one quad: a painter's algorithm sorts by a face's average
+  depth, and one enormous quad painted over the keys printed on its far half.
+- The install banner sits at the top, "Not now" dismisses it for three days, and it no longer
+  needs a refresh to come back.
+
+### Added
+
+- A console recorder in settings, for phones with no console: the last 200 lines, copyable.
+- Full screen for the 3D view, a plugboard close-up, and a control-size preference.
+- An operator's note card beside the machine, written on by hand and kept on the device.
+
 ## [0.5.0] - 2026-11-10
 
 ### Changed

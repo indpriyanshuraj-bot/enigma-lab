@@ -4,6 +4,7 @@ import { Keypad } from './modes/keypad.js';
 import { ThreeDMode } from './modes/three-d-mode.js';
 import { CUSTOM_PRESET_ID, encodeHash, keyspaceFor, loadState, machineFor, nextLetter, rollKey, saveState, stateForPreset, type LabState } from './state/store.js';
 import { applyTheme, loadPrefs, savePrefs, type Mode, type Prefs } from './state/prefs.js';
+import { clearLogs, formatLogs, installRecorder, pauseRecorder, readLogs } from './state/logs.js';
 import { Builder, KeyspaceExplorer, SignalPanel } from './ui/panels.js';
 import { Controls } from './ui/controls.js';
 import { IconChart, IconClear, IconCopy, IconGears, IconKeyboard, IconSignal, IconWheels } from './ui/icons.js';
@@ -12,7 +13,7 @@ import { Settings } from './ui/settings.js';
 import { Sheet } from './ui/sheet.js';
 
 const PRESET_IDS = [...Object.keys(PRESETS), CUSTOM_PRESET_ID];
-type SheetId = 'keys' | 'space' | 'signal' | 'message';
+type SheetId = 'keys' | 'space' | 'signal' | 'message' | 'note' | 'log';
 
 function dailyKey(state: LabState) {
 	return { rotorOrder: [...state.rotorOrder], rings: state.rings, positions: state.positions };
@@ -29,8 +30,24 @@ export function App() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [sheet, setSheet] = useState<SheetId | null>(null);
 	const [pendingPlug, setPendingPlug] = useState<string | null>(null);
+	const [notes, setNotes] = useState(() => {
+		try {
+			return localStorage.getItem('enigma-lab:notes') ?? 'GRUNDSTELLUNG AAA\nRINGS BBB\nCABLES 10';
+		} catch {
+			return 'GRUNDSTELLUNG AAA';
+		}
+	});
 
 	const mode: Mode = prefs.mode;
+	const noteLines = notes.split('\n');
+
+	useEffect(() => {
+		try {
+			localStorage.setItem('enigma-lab:notes', notes);
+		} catch {
+			// Private mode: the note simply does not persist.
+		}
+	}, [notes]);
 
 	const run = useMemo(() => {
 		const machine = machineFor(state);
@@ -64,7 +81,13 @@ export function App() {
 		savePrefs(prefs);
 		applyTheme(prefs.theme);
 		document.documentElement.dataset.motion = prefs.motion ? 'on' : 'off';
+		document.documentElement.dataset.density = prefs.density;
 	}, [prefs]);
+
+	useEffect(() => {
+		if (prefs.logs) installRecorder();
+		else pauseRecorder();
+	}, [prefs.logs]);
 
 	useEffect(() => {
 		if (!('serviceWorker' in navigator) || !globalThis.isSecureContext) return;
@@ -175,6 +198,8 @@ export function App() {
 				</button>
 			</header>
 
+			<InstallBanner />
+
 			<section class="display" aria-label="Machine readout">
 				<div class="display__meta">
 					<span class="display__window">{run.window}</span>
@@ -206,6 +231,8 @@ export function App() {
 						preference={prefs.renderer}
 						onBackend={setBackend}
 						onPlug={plug}
+						onNote={() => setSheet('note')}
+						notes={noteLines}
 						pendingPlug={pendingPlug}
 					/>
 				)}
@@ -258,6 +285,14 @@ export function App() {
 				<SignalPanel indicator={run.signal.indicator} body={run.signal.body} messageKey={messageKey} />
 			</Sheet>
 
+			<Sheet open={sheet === 'note'} title="Operator's note" onClose={() => setSheet(null)}>
+				<label class="field">
+					<span>Written on the card beside the machine</span>
+					<textarea rows={5} value={notes} onInput={(event) => setNotes((event.target as HTMLTextAreaElement).value.toUpperCase())} />
+				</label>
+				<p class="io__note">Four lines, fourteen characters each — the card is small, the way the real one was.</p>
+			</Sheet>
+
 			<Sheet open={sheet === 'message'} title="Message" onClose={() => setSheet(null)}>
 				<label class="field">
 					<span>Plain or cipher text</span>
@@ -279,9 +314,23 @@ export function App() {
 				</button>
 			</Sheet>
 
-			<InstallBanner />
+			<Settings prefs={prefs} onChange={setPrefs} open={settingsOpen} onClose={() => setSettingsOpen(false)} onShowLog={() => setSheet('log')} />
 
-			<Settings prefs={prefs} onChange={setPrefs} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+			<Sheet open={sheet === 'log'} title="Console log" onClose={() => setSheet(null)}>
+				<pre class="log">
+					{readLogs()
+						.map((entry) => `${new Date(entry.at).toLocaleTimeString()} ${entry.level.toUpperCase()} ${entry.message}`)
+						.join('\n') || 'Nothing captured yet.'}
+				</pre>
+				<div class="controls__actions">
+					<button type="button" class="button" onClick={() => void navigator.clipboard?.writeText(formatLogs())}>
+						Copy
+					</button>
+					<button type="button" class="button button--ghost" onClick={() => clearLogs()}>
+						Clear
+					</button>
+				</div>
+			</Sheet>
 
 			<p class="colophon">
 				<strong>{mode === '3d' ? backend : 'keys'}</strong> · core v{VERSION}

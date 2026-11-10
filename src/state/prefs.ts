@@ -6,7 +6,8 @@
  */
 export type ThemeId = 'dark' | 'light' | 'sepia' | 'contrast';
 export type Mode = 'form' | '3d';
-export type RendererPreference = 'auto' | 'webgpu' | 'webgl' | 'canvas';
+export type RendererPreference = 'auto' | 'webgpu' | 'webgl' | 'svg';
+export type Density = 'comfortable' | 'compact';
 
 export interface Prefs {
 	readonly theme: ThemeId;
@@ -14,6 +15,10 @@ export interface Prefs {
 	readonly renderer: RendererPreference;
 	/** `false` disables easing and any non-essential animation. */
 	readonly motion: boolean;
+	/** How much air the controls get. */
+	readonly density: Density;
+	/** Keeps a console log for phones that have none. */
+	readonly logs: boolean;
 }
 
 const KEY = 'enigma-lab:prefs';
@@ -33,6 +38,8 @@ export function defaultPrefs(): Prefs {
 		mode: 'form',
 		renderer: 'auto',
 		motion: !calm,
+		density: 'comfortable',
+		logs: false,
 	};
 }
 
@@ -46,8 +53,10 @@ export function loadPrefs(): Prefs {
 			theme: THEMES.some((theme) => theme.id === parsed.theme) ? (parsed.theme as ThemeId) : base.theme,
 			mode: parsed.mode === '3d' ? '3d' : 'form',
 			renderer:
-				parsed.renderer === 'webgpu' || parsed.renderer === 'webgl' || parsed.renderer === 'canvas' ? parsed.renderer : 'auto',
+				parsed.renderer === 'webgpu' || parsed.renderer === 'webgl' || parsed.renderer === 'svg' ? parsed.renderer : 'auto',
 			motion: typeof parsed.motion === 'boolean' ? parsed.motion : base.motion,
+			density: parsed.density === 'compact' ? 'compact' : 'comfortable',
+			logs: typeof parsed.logs === 'boolean' ? parsed.logs : base.logs,
 		};
 	} catch {
 		return defaultPrefs();
