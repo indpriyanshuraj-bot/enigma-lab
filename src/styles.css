@@ -1104,12 +1104,13 @@ input[type='range']::-moz-range-thumb {
 	flex-direction: column;
 	min-height: 0;
 	flex: 1 1 auto;
+	overflow: hidden;
 }
 
 .machine__stage--3d {
 	position: relative;
 	flex: 1 1 auto;
-	min-height: 34dvh;
+	min-height: 30dvh;
 	border-radius: var(--radius);
 	background: radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--accent) 12%, var(--surface)) 0%, var(--surface) 62%);
 	border: 1px solid var(--line);
@@ -1151,9 +1152,11 @@ input[type='range']::-moz-range-thumb {
 }
 
 .machine__caption {
+	flex: 0 0 auto;
 	display: flex;
+	flex-wrap: nowrap;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: center;
 	gap: 0.4rem;
 	padding-top: 0.45rem;
 	color: var(--dim);
@@ -1166,13 +1169,16 @@ input[type='range']::-moz-range-thumb {
 
 .machine__camera-actions {
 	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
 	gap: 0.25rem;
-	margin-inline: auto;
+	min-width: 0;
 }
 
 .machine__camera-actions .button {
-	width: 2.1rem;
-	height: 2.1rem;
+	width: 2rem;
+	height: 2rem;
+	white-space: nowrap;
 	padding: 0;
 	border-radius: 50%;
 	display: grid;
@@ -1252,13 +1258,12 @@ input[type='range']::-moz-range-thumb {
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
-	gap: 0.6rem;
-	margin: 0 0.75rem 0.5rem;
-	padding: 0.6rem 0.7rem;
-	background: var(--surface);
-	border: 1px solid var(--line);
+	gap: 0.5rem;
+	margin: 0.5rem 0.75rem 0;
+	padding: 0.5rem 0.6rem;
+	background: var(--accent-soft);
+	border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
 	border-radius: var(--radius-sm);
-	box-shadow: var(--shadow);
 	animation: install-in 240ms var(--ease);
 }
 
@@ -1299,7 +1304,16 @@ input[type='range']::-moz-range-thumb {
 
 .install p span {
 	color: var(--dim);
+	font-size: 0.7rem;
+}
+
+.install .button {
 	font-size: 0.72rem;
+	padding: 0.32rem 0.6rem;
+}
+
+.install .button--ghost {
+	border-color: color-mix(in oklab, var(--accent) 30%, transparent);
 }
 
 .install .button {
@@ -1308,16 +1322,61 @@ input[type='range']::-moz-range-thumb {
 }
 
 @media (min-width: 48rem) {
-	.install {
-		position: fixed;
-		inset: auto 1rem 1rem auto;
-		max-width: 22rem;
-		margin: 0;
-	}
-
 	.machine__caption > span:first-child {
 		display: inline;
 	}
+}
+
+/* Density: one switch, everything follows. */
+:root[data-density='compact'] .key {
+	font-size: 0.9rem;
+	border-radius: 10px;
+}
+
+:root[data-density='compact'] .keyboard {
+	grid-template-rows: repeat(3, minmax(2.2rem, 3.2rem));
+	gap: 0.32rem;
+}
+
+:root[data-density='compact'] .wheel {
+	width: clamp(2.6rem, 13vw, 3.4rem);
+}
+
+:root[data-density='compact'] .display {
+	padding: 0.6rem 0.8rem 0.7rem;
+}
+
+:root[data-density='compact'] .display__out {
+	font-size: clamp(1.4rem, 6.4vw, 1.9rem);
+}
+
+:root[data-density='compact'] .toolbar {
+	padding-block: 0.25rem;
+}
+
+/* The console log, in a sheet. */
+.log {
+	margin: 0 0 0.8rem;
+	padding: 0.6rem 0.7rem;
+	max-height: 45dvh;
+	overflow: auto;
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 0.7rem;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* Full screen machine. */
+.machine__stage--3d.is-fullscreen {
+	border-radius: 0;
+	border: 0;
+	background: var(--bg);
+	max-height: none;
+	height: 100dvh;
 }
 
 /* Motion ---------------------------------------------------------------- */
