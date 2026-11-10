@@ -1,4 +1,4 @@
-import type { RenderTheme } from '@enigma-lab/core/render';
+import type { MachineGeometry, RenderTheme } from '@enigma-lab/core/render';
 
 /**
  * The library deliberately ships no theme, so the site owns its look. These are
@@ -18,9 +18,10 @@ export const labTheme: RenderTheme = {
 };
 
 /** Machine dimensions in user units, tuned for a phone held in one hand. */
-export const machineGeometry = {
-	radius: 46,
-	thickness: 26,
-	gap: 8,
-	casePadding: 22,
-} as const;
+export const machineGeometry: MachineGeometry = {
+	radius: 44,
+	thickness: 14,
+	gap: 10,
+	casePadding: 10,
+	reflectorGap: 16,
+};
