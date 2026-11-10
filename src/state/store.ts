@@ -1,18 +1,13 @@
 import {
-	buildMachine,
-	createReflectorSpec,
-	createRotorSpec,
-	createRng,
+	customModel,
 	DEFAULT_PRESET_ID,
 	generateKey,
+	getModel,
 	getPreset,
-	keyspace,
-	randomReflector,
-	randomWiring,
-	type EnigmaMachine,
-	type MachinePreset,
-	type ReflectorSpec,
-	type RotorSpec,
+	modelKeyspace,
+	modelToConfig,
+	EnigmaMachine,
+	type MachineModel,
 } from '@enigma-lab/core';
 
 /** Everything the operator can change. Serialisable, and small enough for a URL. */
@@ -53,25 +48,25 @@ export function defaultCustomMachine(): CustomMachine {
 	return { rotorCount: 3, seed: 1932, notches: 'Q', reflector: 'random', alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' };
 }
 
-/** Builds the rotor and reflector specs for a custom machine, deterministically. */
-export function customSpecs(custom: CustomMachine): { rotors: RotorSpec[]; reflectors: ReflectorSpec[] } {
-	const alphabet = custom.alphabet;
-	const rng = createRng(custom.seed);
-	const rotors: RotorSpec[] = [];
-	for (let index = 0; index < custom.rotorCount; index += 1) {
-		const wiring = randomWiring(alphabet.length, rng);
-		rotors.push({
-			id: `C${index + 1}`,
-			name: `Custom rotor ${index + 1}`,
-			wiring,
-			notches: [...custom.notches].map((letter) => Math.max(0, alphabet.indexOf(letter))),
+/**
+ * The model a state describes.
+ *
+ * Historical machines are catalogue entries; a custom one is generated from its
+ * seed by the library, so the same seed always produces the same wheels — which
+ * is what makes a shared link mean something.
+ */
+export function modelFor(state: LabState): MachineModel {
+	if (state.presetId === CUSTOM_PRESET_ID && state.custom) {
+		const custom = state.custom;
+		return customModel({
+			rotorCount: custom.rotorCount,
+			seed: custom.seed,
+			notches: custom.notches,
+			reflector: custom.reflector,
+			alphabet: custom.alphabet,
 		});
 	}
-	const reflectors: ReflectorSpec[] = [];
-	if (custom.reflector === 'random') {
-		reflectors.push({ id: 'R', name: 'Random reflector', wiring: randomReflector(alphabet.length, rng) });
-	}
-	return { rotors, reflectors };
+	return getModel(state.presetId);
 }
 
 const STORAGE_KEY = 'enigma-lab:v1';
@@ -124,49 +119,19 @@ export function formatPlugboard(cables: readonly (readonly [string, string])[]):
 
 /** Builds the live machine for a state. Throws only for genuinely invalid input. */
 export function machineFor(state: LabState): EnigmaMachine {
-	const plugboard = state.plugboard.map(([a, b]) => [a, b] as const);
-	if (state.presetId === CUSTOM_PRESET_ID && state.custom) {
-		const { rotors, reflectors } = customSpecs(state.custom);
-		const ids = rotors.map((rotor) => rotor.id);
-		return buildMachine({
-			preset: 'enigma-1',
-			alphabet: state.custom.alphabet,
-			rotorOrder: ids,
-			rotors,
-			reflectors,
-			reflector: state.custom.reflector === 'random' ? 'R' : state.custom.reflector,
-			rings: state.rings,
-			positions: state.positions,
-			plugboard,
-		});
-	}
-	return buildMachine({
-		preset: state.presetId,
+	const model = modelFor(state);
+	const config = modelToConfig(model, {
 		rotorOrder: [...state.rotorOrder],
 		rings: state.rings,
 		positions: state.positions,
-		plugboard,
+		plugboard: state.plugboard.map(([a, b]) => [a, b] as const),
 	});
+	return new EnigmaMachine(config);
 }
 
 /** Key space for the machine the operator has actually configured. */
 export function keyspaceFor(state: LabState) {
-	if (state.presetId === CUSTOM_PRESET_ID && state.custom) {
-		// Every rotor in a home-made machine is unique, so the order count is n!.
-		return keyspace({
-			alphabetSize: state.custom.alphabet.length,
-			rotorPool: state.custom.rotorCount,
-			rotorCount: state.custom.rotorCount,
-			cables: state.plugboard.length,
-		});
-	}
-	const preset: MachinePreset = getPreset(state.presetId);
-	return keyspace({
-		rotorPool: preset.rotorPool.length,
-		rotorCount: state.rotorOrder.length,
-		cables: state.plugboard.length,
-		...(preset.thinRotorChoices ? { thinRotorChoices: preset.thinRotorChoices } : {}),
-	});
+	return modelKeyspace(modelFor(state), { rotorCount: state.rotorOrder.length, cables: state.plugboard.length });
 }
 
 /** Rolls a fresh daily key for the current preset, seeded so it can be shared. */
