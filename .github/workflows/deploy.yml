@@ -48,10 +48,19 @@ jobs:
           key: vendor-${{ runner.os }}-${{ hashFiles('lib.lock.json') }}
 
       - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - run: pnpm run lib
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Browser smoke test
+        run: pnpm exec playwright test
 
       - uses: actions/configure-pages@v6
 
