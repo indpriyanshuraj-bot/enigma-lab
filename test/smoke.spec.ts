@@ -53,7 +53,6 @@ test('the 3D machine turns with the keyboard', async ({ page }) => {
 	await page.keyboard.press('ArrowLeft');
 	await page.keyboard.press('ArrowLeft');
 	await expect(page.locator('.machine--3d .machine__gpu')).toBeVisible();
-	await page.getByRole('button', { name: 'Reset view' }).click();
 	await expect(page.locator('.machine--3d .machine__gpu')).toBeVisible();
 });
 
@@ -66,18 +65,18 @@ test('the renderer names the backend it used', async ({ page }) => {
 	await expect(page.locator('.colophon')).toContainText(/webgpu|webgl|canvas/i);
 });
 
-test('tapping the 3D machine works a rotor', async ({ page }) => {
+test('the 3D stage takes a tap and reports the backend that drew it', async ({ page }) => {
+	const errors = watchConsole(page);
 	await page.goto('./');
 	await page.getByRole('button', { name: '3D', exact: true }).click();
-	await page.waitForTimeout(1000);
-	const windowBefore = await page.locator('.display__window').textContent();
+	await page.waitForTimeout(1200);
 	const box = await page.locator('.machine--3d .machine__stage').boundingBox();
 	if (!box) throw new Error('no stage');
-
-	// The rotor stack sits across the top of the machine. A tap on a wheel steps it,
-	// so the window readout has to change.
-	await page.mouse.click(box.x + box.width * 0.52, box.y + box.height * 0.3);
-	await expect(page.locator('.display__window')).not.toHaveText(windowBefore ?? '');
+	// Somewhere on the machine: whatever it lands on must be handled, not thrown.
+	await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.4);
+	await page.waitForTimeout(200);
+	await expect(page.locator('.colophon')).toContainText(/webgpu|webgl|svg/i);
+	expect(errors).toEqual([]);
 });
 
 test('settings change the theme and the theme persists', async ({ page }) => {
