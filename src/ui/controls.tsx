@@ -6,11 +6,13 @@ export interface ControlsProps {
 	readonly onChange: (next: LabState) => void;
 	readonly presetIds: readonly string[];
 	readonly onReset: () => void;
+	readonly onRollKey: () => void;
 }
 
 /** Every setting an operator would have read off a daily key sheet. */
-export function Controls({ state, onChange, presetIds, onReset }: ControlsProps) {
-	const preset = getPreset(state.presetId);
+export function Controls({ state, onChange, presetIds, onReset, onRollKey }: ControlsProps) {
+	const isCustom = state.presetId === 'custom';
+	const preset = isCustom ? getPreset('enigma-1') : getPreset(state.presetId);
 	const letters = [...state.rotorOrder];
 
 	const setRotor = (index: number, rotorId: string) => {
@@ -40,7 +42,7 @@ export function Controls({ state, onChange, presetIds, onReset }: ControlsProps)
 				>
 					{presetIds.map((id) => (
 						<option key={id} value={id}>
-							{getPreset(id).name}
+							{id === 'custom' ? 'Build your own' : getPreset(id).name}
 						</option>
 					))}
 				</select>
@@ -52,7 +54,7 @@ export function Controls({ state, onChange, presetIds, onReset }: ControlsProps)
 						<label class="field field--tight">
 							<span>Slot {index + 1}</span>
 							<select value={rotorId} onChange={(event) => setRotor(index, (event.target as HTMLSelectElement).value)}>
-								{preset.rotorPool.map((id) => (
+								{(isCustom ? state.rotorOrder : preset.rotorPool).map((id) => (
 									<option key={id} value={id}>
 										{id}
 									</option>
@@ -97,9 +99,14 @@ export function Controls({ state, onChange, presetIds, onReset }: ControlsProps)
 				<small>{state.plugboard.length} of 13 possible cables</small>
 			</label>
 
-			<button type="button" class="button" onClick={onReset}>
-				Reset to {preset.name}
-			</button>
+			<div class="controls__actions">
+				<button type="button" class="button" onClick={onRollKey}>
+					Random key sheet
+				</button>
+				<button type="button" class="button button--ghost" onClick={onReset}>
+					Reset
+				</button>
+			</div>
 		</section>
 	);
 }

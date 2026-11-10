@@ -125,12 +125,34 @@ main {
 	padding: 0.5rem;
 }
 
-.machine svg {
-	display: block;
+.machine__stage {
+	position: relative;
 	width: 100%;
-	height: auto;
-	max-height: 44vh;
-	touch-action: manipulation;
+	aspect-ratio: 9 / 5;
+	max-height: 34vh;
+	margin-inline: auto;
+	touch-action: none;
+	cursor: grab;
+}
+
+.machine__stage:active {
+	cursor: grabbing;
+}
+
+.machine__gpu,
+.machine__overlay {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.machine__gpu {
+	pointer-events: none;
+}
+
+.machine__overlay {
+	overflow: visible;
 }
 
 .machine figcaption {
@@ -147,6 +169,7 @@ main {
 }
 
 .machine__case-label {
+	pointer-events: none;
 	fill: var(--ink-dim);
 	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
 	font-size: 11px;
@@ -155,6 +178,47 @@ main {
 
 .rotor {
 	cursor: pointer;
+}
+
+.rotor--selected .rotor__ring {
+	stroke: var(--accent);
+	stroke-width: 2.5;
+}
+
+.disc {
+	fill: var(--rotor);
+	stroke: var(--edge);
+	stroke-width: 1.5;
+}
+
+.disc--notch {
+	fill: var(--rotor-notch);
+}
+
+.lid {
+	cursor: pointer;
+}
+
+.lid__panel {
+	fill: color-mix(in oklab, var(--case) 88%, var(--bg));
+	stroke: var(--edge);
+	stroke-width: 2;
+	fill-opacity: 0.97;
+}
+
+.lid__label {
+	fill: var(--ink-dim);
+	font-size: 13px;
+	text-anchor: middle;
+	dominant-baseline: middle;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	pointer-events: none;
+}
+
+.lid:focus-visible .lid__panel {
+	stroke: var(--accent);
+	stroke-width: 3;
 }
 
 .rotor:focus-visible {
@@ -519,5 +583,100 @@ kbd {
 	* {
 		transition-duration: 0.01ms !important;
 		animation-duration: 0.01ms !important;
+	}
+}
+
+/* Rotor actions, sliders and the signal panel -------------------------- */
+
+.rotor-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+	background: var(--panel);
+	border: 1px solid var(--edge);
+	border-radius: var(--radius);
+	padding: 0.5rem 0.75rem;
+	font-size: 0.85rem;
+}
+
+.rotor-actions > span {
+	color: var(--ink-dim);
+	margin-right: auto;
+}
+
+.controls__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+input[type='range'] {
+	appearance: none;
+	width: 100%;
+	height: 1.6rem;
+	background: transparent;
+	padding: 0;
+	border: 0;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--bg-soft);
+	border: 1px solid var(--edge);
+}
+
+input[type='range']::-webkit-slider-thumb {
+	appearance: none;
+	width: 20px;
+	height: 20px;
+	margin-top: -8px;
+	border-radius: 50%;
+	background: var(--accent);
+	border: 2px solid var(--bg);
+}
+
+input[type='range']::-moz-range-track {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--bg-soft);
+	border: 1px solid var(--edge);
+}
+
+input[type='range']::-moz-range-thumb {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--accent);
+	border: 2px solid var(--bg);
+}
+
+.signal__line {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	margin: 0 0 0.7rem;
+}
+
+.signal__label {
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--ink-dim);
+}
+
+.signal__line code {
+	font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+	font-size: 0.95rem;
+	letter-spacing: 0.14em;
+	overflow-wrap: anywhere;
+	color: var(--accent);
+}
+
+@media (min-width: 46rem) {
+	.machine__stage {
+		aspect-ratio: 2 / 1;
+		max-height: 46vh;
 	}
 }
