@@ -34,7 +34,8 @@ machine in under a minute.
 | Path | What it is |
 | --- | --- |
 | `src/` | the site: Preact components, modes, state, renderers |
-| `src/render/scene3d.ts` | the 3D machine: orbit camera, painter's algorithm, hit testing |
+| `src/render/scene3d.ts` | the 3D machine: case, deck, wheels, keys, sockets, labels, hotspots |
+| `src/render/surface.ts` | the triangle pipeline: WebGPU → WebGL2 → 2D canvas |
 | `about.html`, `facts.html` | static pages, no JavaScript beyond a theme probe |
 | `public/` | service worker, web app manifest, icons, `404.html`, `robots.txt` |
 | `scripts/fetch-lib.mjs` | downloads and sha256-verifies the pinned core release |
@@ -73,15 +74,21 @@ bundler family the library itself is built with.
 
 - **Mobile first.** One column, thumb-sized targets, `100dvh` layout, safe-area insets.
 - **Keyboard and pointer.** A–Z, `Backspace`, `Esc`; every rotor is also a button.
-- **Rendering with a real fallback.** In the form view WebGPU rasterises the rotor discs when
-  the device offers an adapter; SVG draws them otherwise, and always draws the letters,
-  captions, focus rings and the lid. Both read the same projected scene and the same hit
-  test, so a tap lands on the same rotor either way. The 3D view is a painter's-algorithm
-  renderer on a 2D canvas, so it works on every device. The footer says which backend drew
-  the frame.
+- **One pipeline, three backends.** Every face the machine draws becomes a flat-shaded
+  triangle in screen space, and the same triangles go to WebGPU if the device has an
+  adapter, WebGL2 if it has that, and a 2D canvas if it has neither. Labels always render on
+  a 2D overlay, so text stays crisp whatever rasterises the geometry. The footer names the
+  backend that drew the frame, and settings can pin it lower for a device with a bad driver.
+- **The whole machine in 3D.** Case, lid, rotor stack, reflector, keyboard, lampboard and
+  plugboard are one model: tap a key to send a letter, a rotor to step it, a socket to plug
+  a cable.
 - **Accessible by construction.** A skip link, landmarks, `aria-current` on the navigation,
   a native `<dialog>` for settings, `aria-live` readouts, real focus rings, keyboard control
   of the 3D camera, and a motion switch that also honours `prefers-reduced-motion`.
+- **Installable, and it asks.** A banner appears once the browser says the app is
+  installable — a few seconds in, or on the first interaction — explains what it gets you,
+  and never returns once dismissed. On iOS, where there is no prompt, it says which two taps
+  to use instead.
 - **Findable.** Per-page titles, descriptions, canonicals and Open Graph tags, JSON-LD on all
   three pages, a sitemap, and semantic headings — with the two content pages shipping no
   JavaScript at all.

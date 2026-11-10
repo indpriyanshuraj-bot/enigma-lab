@@ -79,9 +79,10 @@ export function Settings({ prefs, onChange, open, onClose }: SettingsProps) {
 							value={prefs.renderer}
 							onChange={(event) => onChange({ ...prefs, renderer: (event.target as HTMLSelectElement).value as Prefs['renderer'] })}
 						>
-							<option value="auto">Automatic — WebGPU when available</option>
+							<option value="auto">Automatic — WebGPU, then WebGL, then canvas</option>
 							<option value="webgpu">WebGPU only</option>
-							<option value="svg">SVG only</option>
+							<option value="webgl">WebGL2 only</option>
+							<option value="canvas">2D canvas only</option>
 						</select>
 					</label>
 					<label class="field field--row">

@@ -1,102 +1,138 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
-	buildMachine3d,
+	buildScene3D,
 	hitTest3d,
-	paint3d,
-	type Machine3DOptions,
+	paintLabels,
+	renderTriangles,
+	type Hotspot,
 	type OrbitCamera,
+	type Palette,
 } from '../render/scene3d.js';
-import { parseColour } from '../render/webgpu-machine.js';
+import { createSurface, type Surface } from '../render/surface.js';
+import { parseColour } from '../render/colour.js';
 
 export interface ThreeDProps {
 	readonly windows: readonly string[];
 	readonly rings: readonly string[];
 	readonly ids: readonly string[];
 	readonly reflector: string;
+	readonly alphabet: string;
 	readonly lidOpen: boolean;
-	readonly onToggleLid: () => void;
-	readonly onSelectRotor: (index: number) => void;
-	readonly selected: number | null;
+	readonly lit: string | null;
+	readonly plugged: readonly string[];
 	readonly motion: boolean;
+	readonly preference: 'auto' | 'webgpu' | 'webgl' | 'canvas';
+	readonly onToggleLid: () => void;
+	readonly onRotor: (index: number) => void;
+	readonly onKey: (letter: string) => void;
+	readonly onPlug: (letter: string) => void;
+	readonly onBackend: (backend: string) => void;
 }
 
-const START: OrbitCamera = { yaw: -0.62, pitch: 0.5, distance: 250, focal: 520, target: { x: 0, y: -6, z: 0 } };
-const PITCH_MIN = 0.12;
-const PITCH_MAX = 1.35;
+const START: OrbitCamera = { yaw: -0.5, pitch: 0.5, distance: 400, focal: 640, target: { x: 0, y: -60, z: 0 } };
+const PITCH_MIN = 0.08;
+const PITCH_MAX = 1.4;
 
-function readColours(): { rotor: string; rotorRing: string; case: string; ink: string; accent: string } {
+function readPalette(): Palette {
 	const style = getComputedStyle(document.documentElement);
 	const read = (name: string, fallback: string): string => {
 		const value = style.getPropertyValue(name).trim();
 		return parseColour(value) ? value : fallback;
 	};
 	return {
+		case: read('--case', '#1a232e'),
+		caseEdge: read('--edge-strong', '#35455a'),
 		rotor: read('--rotor', '#22303e'),
 		rotorRing: read('--rotor-ring', '#2b3b4c'),
-		case: read('--case', '#1a232e'),
-		ink: read('--ink', '#e6edf3'),
+		ink: read('--ink', '#e8eef4'),
 		accent: read('--accent', '#d6a94a'),
+		key: read('--key', '#1b2430'),
+		keyLit: read('--accent', '#d6a94a'),
+		panel: read('--deck', '#202b38'),
+		lamp: read('--lamp', '#2b3b4c'),
 	};
 }
 
 /**
- * The machine as an object you can turn over.
+ * The whole machine, in three dimensions.
  *
- * Drawn on a 2D canvas by a painter's algorithm, so it works everywhere. The
- * camera eases towards where the pointer puts it; with motion switched off it
- * snaps, and nothing moves unless you move it.
+ * Geometry goes through the shared triangle pipeline — WebGPU, then WebGL2, then
+ * a 2D canvas — and every label is drawn on a 2D overlay, so text stays crisp
+ * whatever rasterises the faces. Keys are live: tapping one sends a letter.
  */
 export function ThreeD(props: ThreeDProps) {
-	const { windows, rings, ids, reflector, lidOpen, onToggleLid, onSelectRotor, selected, motion } = props;
-	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const { windows, rings, ids, reflector, alphabet, lidOpen, lit, plugged, motion, preference } = props;
+	const surfaceRef = useRef<Surface | null>(null);
+	// Bumped when the surface finishes initialising, so the first frame is drawn.
+	const [surfaceReady, setSurfaceReady] = useState(0);
+	const geometryRef = useRef<HTMLCanvasElement>(null);
+	const overlayRef = useRef<HTMLCanvasElement>(null);
 	const hostRef = useRef<HTMLDivElement>(null);
 	const [camera, setCamera] = useState<OrbitCamera>(START);
 	const target = useRef<OrbitCamera>(START);
 	const frame = useRef<number | null>(null);
 	const drag = useRef<{ x: number; y: number; yaw: number; pitch: number; moved: number } | null>(null);
 
-	const options = useMemo<Machine3DOptions>(
-		() => ({
-			rotorCount: Math.max(windows.length, 1),
-			radius: 46,
-			length: 26,
-			gap: 6,
-			reflectorThickness: 10,
-			reflectorGap: 8,
-			case: 7,
-			lidOpen,
-		}),
-		[windows.length, lidOpen],
+	const scene = useMemo(
+		() => buildScene3D({ rotorCount: windows.length, windows, rings, ids, reflector, lidOpen, alphabet, lit, plugged }, readPalette()),
+		[windows, rings, ids, reflector, lidOpen, alphabet, lit, plugged],
 	);
+
+	// One surface for the life of the view.
+	useEffect(() => {
+		let cancelled = false;
+		const canvas = geometryRef.current;
+		if (!canvas) return;
+		void createSurface(canvas, preference).then((surface) => {
+			if (cancelled) {
+				surface.dispose();
+				return;
+			}
+			surfaceRef.current = surface;
+			setSurfaceReady((value) => value + 1);
+			props.onBackend(`${surface.backend}: ${surface.reason}`);
+		});
+		return () => {
+			cancelled = true;
+			surfaceRef.current?.dispose();
+			surfaceRef.current = null;
+		};
+		// Re-creating the surface on a preference change is deliberate: it is the
+		// only way to honour "draw on the canvas, not the GPU".
+	}, [preference]);
 
 	const draw = useCallback(
 		(active: OrbitCamera) => {
-			const canvas = canvasRef.current;
 			const host = hostRef.current;
-			if (!canvas || !host) return;
+			const overlay = overlayRef.current;
+			if (!host || !overlay) return;
 			const rect = host.getBoundingClientRect();
 			const width = Math.max(rect.width, 1);
 			const height = Math.max(rect.height, 1);
 			const ratio = Math.min(globalThis.devicePixelRatio || 1, 2);
-			if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
-				canvas.width = Math.round(width * ratio);
-				canvas.height = Math.round(height * ratio);
+
+			const surface = surfaceRef.current;
+			if (surface) {
+				surface.resize(width, height, ratio);
+				surface.draw(renderTriangles(scene.faces, active, width, height));
 			}
-			const context = canvas.getContext('2d');
+
+			const context = overlay.getContext('2d');
 			if (!context) return;
-			context.setTransform(ratio, 0, 0, ratio, 0, 0);
-			const faces = buildMachine3d(options, { windows, rings, ids, reflector }, readColours());
-			paint3d(context, faces, active, width, height);
+			overlay.width = Math.max(1, Math.round(width * ratio));
+			overlay.height = Math.max(1, Math.round(height * ratio));
+			paintLabels(context, scene, active, width, height, ratio);
 		},
-		[options, windows, rings, ids, reflector],
+		[scene],
 	);
 
+	// Ease towards the target camera; snap when motion is off.
 	useEffect(() => {
 		const step = () => {
 			setCamera((current) => {
 				const goal = target.current;
 				if (!motion) return goal;
-				const ease = 0.22;
+				const ease = 0.24;
 				const next: OrbitCamera = {
 					...goal,
 					yaw: current.yaw + (goal.yaw - current.yaw) * ease,
@@ -120,15 +156,28 @@ export function ThreeD(props: ThreeDProps) {
 
 	useEffect(() => {
 		draw(camera);
-	}, [draw, camera, selected]);
+	}, [draw, camera, surfaceReady]);
 
+	// A phone-shaped stage needs a longer lens: the machine is wide, the screen is
+	// tall, so the camera steps back instead of cropping the rotors.
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host) return;
-		const observer = new ResizeObserver(() => draw(camera));
+		const fit = () => {
+			const rect = host.getBoundingClientRect();
+			const aspect = rect.width / Math.max(rect.height, 1);
+			const wanted = aspect < 1.25 ? 720 : aspect < 1.8 ? 500 : 430;
+			if (Math.abs(target.current.distance - wanted) > 1) {
+				target.current = { ...target.current, distance: wanted };
+				if (!motion) setCamera(target.current);
+			}
+			draw(camera);
+		};
+		fit();
+		const observer = new ResizeObserver(fit);
 		observer.observe(host);
 		return () => observer.disconnect();
-	}, [draw, camera]);
+	}, [draw, camera, motion]);
 
 	const orbit = (deltaYaw: number, deltaPitch: number) => {
 		const goal = target.current;
@@ -142,8 +191,15 @@ export function ThreeD(props: ThreeDProps) {
 
 	const zoom = (factor: number) => {
 		const goal = target.current;
-		target.current = { ...goal, distance: Math.min(900, Math.max(140, goal.distance * factor)) };
+		target.current = { ...goal, distance: Math.min(900, Math.max(150, goal.distance * factor)) };
 		if (!motion) setCamera(target.current);
+	};
+
+	const activate = (hit: Hotspot | null) => {
+		if (!hit) return;
+		if (hit.kind === 'rotor') props.onRotor(hit.index);
+		else if (hit.kind === 'key') props.onKey(hit.letter);
+		else props.onPlug(hit.letter);
 	};
 
 	return (
@@ -153,7 +209,7 @@ export function ThreeD(props: ThreeDProps) {
 				ref={hostRef}
 				tabindex={0}
 				role="application"
-				aria-label={`Enigma machine in three dimensions, showing ${windows.join('')}. Arrow keys turn it, plus and minus zoom, Enter works the selected rotor.`}
+				aria-label={`Enigma machine in three dimensions, showing ${windows.join('')}. Arrow keys turn it, plus and minus zoom, letters type.`}
 				onPointerDown={(event) => {
 					(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
 					drag.current = { x: event.clientX, y: event.clientY, yaw: target.current.yaw, pitch: target.current.pitch, moved: 0 };
@@ -179,22 +235,14 @@ export function ThreeD(props: ThreeDProps) {
 					const host = hostRef.current;
 					if (!host) return;
 					const rect = host.getBoundingClientRect();
-					const hit = hitTest3d(
-						{ x: event.clientX - rect.left, y: event.clientY - rect.top },
-						options,
-						camera,
-						rect.width,
-						rect.height,
-					);
-					if (hit !== null) onSelectRotor(hit);
+					activate(hitTest3d({ x: event.clientX - rect.left, y: event.clientY - rect.top }, scene, camera, rect.width, rect.height));
 				}}
 				onWheel={(event) => {
 					event.preventDefault();
 					zoom(event.deltaY > 0 ? 1.08 : 0.92);
 				}}
 				onKeyDown={(event) => {
-					const handled = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', '_'];
-					if (!handled.includes(event.key)) return;
+					if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', '_'].includes(event.key)) return;
 					event.preventDefault();
 					if (event.key === 'ArrowLeft') orbit(-0.14, 0);
 					else if (event.key === 'ArrowRight') orbit(0.14, 0);
@@ -204,15 +252,16 @@ export function ThreeD(props: ThreeDProps) {
 					else zoom(1.1);
 				}}
 			>
-				<canvas ref={canvasRef} class="machine__canvas3d" />
-				{lidOpen ? null : (
-					<button type="button" class="machine__lid-hint" onClick={onToggleLid}>
+				<canvas ref={geometryRef} class="machine__gpu" aria-hidden="true" />
+				<canvas ref={overlayRef} class="machine__overlay" aria-hidden="true" />
+				{!lidOpen ? (
+					<button type="button" class="machine__lid-hint" onClick={props.onToggleLid}>
 						Lift the lid
 					</button>
-				)}
+				) : null}
 			</div>
 			<figcaption class="machine__caption">
-				<span>Drag to turn, scroll to zoom, tap a rotor to work it.</span>
+				<span>Drag to turn · scroll to zoom · tap a key, a rotor or a socket</span>
 				<span class="machine__camera-actions">
 					<button type="button" class="button button--ghost" onClick={() => orbit(-0.3, 0)} aria-label="Turn left">
 						↺

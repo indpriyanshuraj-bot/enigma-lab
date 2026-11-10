@@ -33,6 +33,13 @@ Accessibility, SEO, themes, and a browser suite that runs the whole thing.
 - 11 Playwright checks across a phone and a desktop, in CI, on every pull request and before
   every deploy.
 
+## Phase 4.5 — the machine you can pick up (done, v0.4.0)
+
+- One triangle pipeline with three backends: WebGPU, WebGL2, 2D canvas.
+- The whole machine as a single 3D model — case, sloped deck, wheels, keys, lamps, sockets.
+- Custom machines as first-class models: the maths in the library, the pixels here.
+- An install banner that appears on its own and stays gone once dismissed.
+
 ## Phase 5 — next
 
 - A Lighthouse budget enforced in CI.

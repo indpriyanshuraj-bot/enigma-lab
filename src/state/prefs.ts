@@ -6,7 +6,7 @@
  */
 export type ThemeId = 'dark' | 'light' | 'sepia' | 'contrast';
 export type Mode = 'form' | '3d';
-export type RendererPreference = 'auto' | 'webgpu' | 'svg';
+export type RendererPreference = 'auto' | 'webgpu' | 'webgl' | 'canvas';
 
 export interface Prefs {
 	readonly theme: ThemeId;
@@ -45,7 +45,8 @@ export function loadPrefs(): Prefs {
 		return {
 			theme: THEMES.some((theme) => theme.id === parsed.theme) ? (parsed.theme as ThemeId) : base.theme,
 			mode: parsed.mode === '3d' ? '3d' : 'form',
-			renderer: parsed.renderer === 'webgpu' || parsed.renderer === 'svg' ? parsed.renderer : 'auto',
+			renderer:
+				parsed.renderer === 'webgpu' || parsed.renderer === 'webgl' || parsed.renderer === 'canvas' ? parsed.renderer : 'auto',
 			motion: typeof parsed.motion === 'boolean' ? parsed.motion : base.motion,
 		};
 	} catch {

@@ -36,7 +36,7 @@ test('the two interfaces share one machine', async ({ page }) => {
 	const formOutput = await page.locator('.output__text').textContent();
 
 	await page.getByRole('button', { name: '3D', exact: true }).click();
-	await expect(page.locator('.machine__canvas3d')).toBeVisible();
+	await expect(page.locator('.machine--3d .machine__gpu')).toBeVisible();
 	// The same letters, read out in HTML so they stay selectable and announced.
 	await expect(page.locator('.readout__value--wide').nth(1)).toHaveText(formOutput ?? '');
 	await expect(page.locator('.readout__value--wide').first()).toHaveText('AAD');
@@ -52,9 +52,32 @@ test('the 3D machine turns with the keyboard', async ({ page }) => {
 	await stage.focus();
 	await page.keyboard.press('ArrowLeft');
 	await page.keyboard.press('ArrowLeft');
-	await expect(page.locator('.machine__canvas3d')).toBeVisible();
+	await expect(page.locator('.machine--3d .machine__gpu')).toBeVisible();
 	await page.getByRole('button', { name: 'Reset view' }).click();
-	await expect(page.locator('.machine__canvas3d')).toBeVisible();
+	await expect(page.locator('.machine--3d .machine__gpu')).toBeVisible();
+});
+
+test('the renderer names the backend it used', async ({ page }) => {
+	await page.goto('./');
+	await expect(page.getByText(/core v\d+\.\d+\.\d+/)).toBeVisible();
+	await page.getByRole('button', { name: '3D', exact: true }).click();
+	// Headless Chromium has no WebGPU adapter, so this must fall through to WebGL
+	// or the canvas — either is a real backend, and the footer has to say which.
+	await expect(page.locator('.footer')).toContainText(/webgpu|webgl|canvas/i);
+});
+
+test('tapping the 3D machine works a rotor', async ({ page }) => {
+	await page.goto('./');
+	await page.getByRole('button', { name: '3D', exact: true }).click();
+	await page.waitForTimeout(1000);
+	const windowBefore = await page.locator('.readout__value--wide').first().textContent();
+	const box = await page.locator('.machine--3d .machine__stage').boundingBox();
+	if (!box) throw new Error('no stage');
+
+	// The rotor stack sits across the top of the machine. A tap on a wheel steps it,
+	// so the window readout has to change.
+	await page.mouse.click(box.x + box.width * 0.52, box.y + box.height * 0.22);
+	await expect(page.locator('.readout__value--wide').first()).not.toHaveText(windowBefore ?? '');
 });
 
 test('settings change the theme and the theme persists', async ({ page }) => {
