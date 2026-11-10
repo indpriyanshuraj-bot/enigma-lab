@@ -26,6 +26,15 @@ Two invariants hold the renderer together:
   and an SVG that letterboxes agree about where every rotor is;
 - `hitTestScene` is the only definition of "which rotor is this", used by every backend.
 
+## The two interfaces
+
+`src/modes/form.tsx` is the form: settings, message, keyboard, key space, all as controls.
+`src/modes/three-d-mode.tsx` wraps `ThreeD`, which renders the machine with
+`src/render/scene3d.ts` — cylinders and a case box, an orbit camera, a painter's algorithm on
+a 2D canvas, and `hitTest3d` for taps. Neither mode owns state: both take the same
+`LabState` and call the same `onChange`, so they are two views of one machine rather than two
+implementations of one idea.
+
 ## The site
 
 State is one serialisable object, persisted to `localStorage` and mirrored into the URL
