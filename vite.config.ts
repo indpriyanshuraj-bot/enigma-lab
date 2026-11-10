@@ -19,6 +19,9 @@ export default defineConfig({
 	build: {
 		target: 'es2022',
 		cssMinify: 'esbuild',
+		// three.js is a large graph; esbuild minifies it reliably where the oxc
+		// native binding has fallen back to WASM and run out of memory.
+		minify: 'esbuild',
 		assetsInlineLimit: 2048,
 		reportCompressedSize: true,
 		rollupOptions: {

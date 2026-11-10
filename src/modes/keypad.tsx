@@ -1,4 +1,3 @@
-import { MACHINE_COLOURS } from '../render/scene3d.js';
 import { Keyboard } from '../ui/keyboard.js';
 
 export interface KeypadWheel {
@@ -32,7 +31,7 @@ export function Keypad({ wheels, lit, onPress, onBackspace, onStep }: KeypadProp
 						type="button"
 						key={`${wheel.id}-${index}`}
 						class={wheel.atNotch ? 'wheel wheel--notch' : 'wheel'}
-						style={{ '--wheel': MACHINE_COLOURS.rotors[index % MACHINE_COLOURS.rotors.length] }}
+						style={{ '--wheel': ['#3f6f8f', '#4f8a5f', '#b07a2a', '#7a5b9a', '#3f8a8a', '#a05a5a'][index % 6] }}
 						onClick={() => onStep(index)}
 						aria-label={`Rotor ${index + 1}, ${wheel.id}, window ${wheel.window}, ring ${wheel.ring}${wheel.atNotch ? ', on its turnover notch' : ''}`}
 					>

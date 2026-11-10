@@ -227,8 +227,6 @@ export function App() {
 				) : (
 					<ThreeDMode
 						{...shared}
-						motion={prefs.motion}
-						preference={prefs.renderer}
 						onBackend={setBackend}
 						onPlug={plug}
 						onNote={() => setSheet('note')}
