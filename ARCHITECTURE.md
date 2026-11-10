@@ -40,8 +40,12 @@ implementations of one idea.
 State is one serialisable object, persisted to `localStorage` and mirrored into the URL
 hash, so a setup can be shared as a link.
 
-Rendering is split by job, not by fashion: WebGPU rasterises the rotor discs, SVG draws
-everything that must be readable, focusable or announced. The machine stage renders the
+Rendering is one pipeline with three backends. `src/render/surface.ts` takes triangles in
+screen space and rasterises them with WebGPU, WebGL2 or a 2D canvas, in that order; the 3D
+scene and the top-down discs both feed it. Text never goes through the pipeline: labels are
+drawn on a 2D overlay, so they stay crisp and the fallback stays honest.
+
+In the form view, SVG still draws everything that must be readable, focusable or announced. The machine stage renders the
 scene, forwards pointer gestures to a camera, and turns taps into hits through the
 library's own hit test. If the GPU cannot be initialised — no adapter, no device, a lost
 context — `createGpuMachine` resolves `null` and the SVG discs take over.
