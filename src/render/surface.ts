@@ -7,7 +7,7 @@
  * the same order. Text is not drawn here: it goes on a 2D overlay canvas, which
  * keeps labels crisp on every backend and keeps the fallback honest.
  */
-export type Backend = 'webgpu' | 'webgl' | 'canvas';
+export type Backend = 'webgpu' | 'webgl2' | 'webgl' | 'svg';
 
 export interface Point {
 	readonly x: number;
@@ -83,6 +83,20 @@ out vec3 vColour;
 void main() {
 	vColour = aColour;
 	gl_Position = vec4(aPosition, 0.0, 1.0);
+}`;
+
+const GLSL1_VERTEX = `attribute vec2 aPosition;
+attribute vec3 aColour;
+varying vec3 vColour;
+void main() {
+	vColour = aColour;
+	gl_Position = vec4(aPosition, 0.0, 1.0);
+}`;
+
+const GLSL1_FRAGMENT = `precision mediump float;
+varying vec3 vColour;
+void main() {
+	gl_FragColor = vec4(vColour, 1.0);
 }`;
 
 const GLSL_FRAGMENT = `#version 300 es
@@ -193,9 +207,12 @@ async function webgpuSurface(canvas: HTMLCanvasElement): Promise<Surface | null>
 	}
 }
 
-function webglSurface(canvas: HTMLCanvasElement): Surface | null {
+function webglSurface(canvas: HTMLCanvasElement, version: 2 | 1): Surface | null {
 	try {
-		const gl = canvas.getContext('webgl2', { alpha: true, antialias: true, premultipliedAlpha: true });
+		const gl =
+			version === 2
+				? canvas.getContext('webgl2', { alpha: true, antialias: true, premultipliedAlpha: true })
+				: canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
 		if (!gl) return null;
 
 		const compile = (type: number, source: string): WebGLShader | null => {
@@ -205,8 +222,8 @@ function webglSurface(canvas: HTMLCanvasElement): Surface | null {
 			gl.compileShader(shader);
 			return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null;
 		};
-		const vertex = compile(gl.VERTEX_SHADER, GLSL_VERTEX);
-		const fragment = compile(gl.FRAGMENT_SHADER, GLSL_FRAGMENT);
+		const vertex = compile(gl.VERTEX_SHADER, version === 2 ? GLSL_VERTEX : GLSL1_VERTEX);
+		const fragment = compile(gl.FRAGMENT_SHADER, version === 2 ? GLSL_FRAGMENT : GLSL1_FRAGMENT);
 		const program = gl.createProgram();
 		if (!vertex || !fragment || !program) return null;
 		gl.attachShader(program, vertex);
@@ -223,8 +240,8 @@ function webglSurface(canvas: HTMLCanvasElement): Surface | null {
 		let disposed = false;
 
 		return {
-			backend: 'webgl',
-			reason: 'WebGL2 context acquired',
+			backend: version === 2 ? 'webgl2' : 'webgl',
+			reason: version === 2 ? 'WebGL2 context acquired' : 'WebGL1 context acquired (WebGL2 unavailable)',
 			resize(nextWidth, nextHeight, ratio) {
 				width = nextWidth;
 				height = nextHeight;
@@ -256,34 +273,55 @@ function webglSurface(canvas: HTMLCanvasElement): Surface | null {
 	}
 }
 
-function canvasSurface(canvas: HTMLCanvasElement): Surface | null {
-	const context = canvas.getContext('2d');
-	if (!context) return null;
-	let ratio = 1;
+/**
+ * The last resort: real SVG polygons in a real SVG element.
+ *
+ * Slower than a GPU, but it is the one backend that works everywhere — no WebGL
+ * at all, no canvas rasterising, and the polygons stay vector-sharp when the page
+ * is zoomed. Triangles are grouped by colour so the DOM stays small.
+ */
+function svgSurface(canvas: HTMLCanvasElement): Surface | null {
+	const parent = canvas.parentElement;
+	if (!parent) return null;
+	canvas.style.display = 'none';
+	let svg = parent.querySelector<SVGSVGElement>('svg.rt-svg');
+	if (!svg) {
+		svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('class', 'rt-svg');
+		svg.setAttribute('aria-hidden', 'true');
+		svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:visible';
+		parent.append(svg);
+	}
+	let width = 1;
+	let height = 1;
+
 	return {
-		backend: 'canvas',
-		reason: 'no GPU context available, drawing on a 2D canvas',
-		resize(width, height, nextRatio) {
-			ratio = nextRatio;
-			canvas.width = Math.max(1, Math.round(width * ratio));
-			canvas.height = Math.max(1, Math.round(height * ratio));
+		backend: 'svg',
+		reason: 'no GPU context available, drawing vector polygons',
+		resize(nextWidth, nextHeight) {
+			width = nextWidth;
+			height = nextHeight;
+			svg?.setAttribute('viewBox', `0 0 ${width} ${height}`);
 		},
 		draw(triangles) {
-			context.setTransform(ratio, 0, 0, ratio, 0, 0);
-			context.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+			if (!svg) return;
+			const groups = new Map<string, string>();
 			for (const triangle of triangles) {
-				const [r, g, b] = triangle.colour;
-				context.fillStyle = `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
-				context.beginPath();
-				context.moveTo(triangle.a.x, triangle.a.y);
-				context.lineTo(triangle.b.x, triangle.b.y);
-				context.lineTo(triangle.c.x, triangle.c.y);
-				context.closePath();
-				context.fill();
+				const key = `${Math.round(triangle.colour[0] * 255)},${Math.round(triangle.colour[1] * 255)},${Math.round(triangle.colour[2] * 255)}`;
+				const path = groups.get(key) ?? '';
+				groups.set(
+					key,
+					`${path}M${triangle.a.x.toFixed(1)} ${triangle.a.y.toFixed(1)}L${triangle.b.x.toFixed(1)} ${triangle.b.y.toFixed(1)}L${triangle.c.x.toFixed(1)} ${triangle.c.y.toFixed(1)}Z`,
+				);
 			}
+			const nodes: string[] = [];
+			for (const [key, path] of groups) {
+				nodes.push(`<path d="${path}" fill="rgb(${key})" shape-rendering="crispEdges"/>`);
+			}
+			svg.innerHTML = nodes.join('');
 		},
 		dispose() {
-			context.clearRect(0, 0, canvas.width, canvas.height);
+			svg?.remove();
 		},
 	};
 }
@@ -294,16 +332,39 @@ function canvasSurface(canvas: HTMLCanvasElement): Surface | null {
  * Order matters: WebGPU, then WebGL2, then the 2D canvas. A preference can pin
  * it lower — a device with a broken driver is a real thing.
  */
-export async function createSurface(canvas: HTMLCanvasElement, preference: 'auto' | 'webgpu' | 'webgl' | 'canvas' = 'auto'): Promise<Surface> {
-	if (preference !== 'canvas' && preference !== 'webgl') {
-		const gpu = await webgpuSurface(canvas);
-		if (gpu) return gpu;
+export async function createSurface(
+	canvas: HTMLCanvasElement,
+	preference: 'auto' | 'webgpu' | 'webgl' | 'svg' = 'auto',
+): Promise<Surface> {
+	// One ladder, one try/except per rung: every backend receives exactly the same
+	// triangle list, so nothing can be missing from one and present in another.
+	const order: ('webgpu' | 'webgl2' | 'webgl' | 'svg')[] =
+		preference === 'svg'
+			? ['svg']
+			: preference === 'webgl'
+				? ['webgl2', 'webgl', 'svg']
+				: preference === 'webgpu'
+					? ['webgpu', 'webgl2', 'webgl', 'svg']
+					: ['webgpu', 'webgl2', 'webgl', 'svg'];
+
+	for (const backend of order) {
+		try {
+			if (backend === 'webgpu') {
+				const surface = await webgpuSurface(canvas);
+				if (surface) return surface;
+			} else if (backend === 'webgl2') {
+				const surface = webglSurface(canvas, 2);
+				if (surface) return surface;
+			} else if (backend === 'webgl') {
+				const surface = webglSurface(canvas, 1);
+				if (surface) return surface;
+			} else {
+				const surface = svgSurface(canvas);
+				if (surface) return surface;
+			}
+		} catch {
+			// Try the next rung.
+		}
 	}
-	if (preference !== 'canvas') {
-		const webgl = webglSurface(canvas);
-		if (webgl) return webgl;
-	}
-	const fallback = canvasSurface(canvas);
-	if (fallback) return fallback;
 	throw new Error('no rendering context available');
 }
