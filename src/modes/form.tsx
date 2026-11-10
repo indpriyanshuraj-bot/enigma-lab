@@ -19,8 +19,8 @@ export interface FormModeProps {
 	};
 	readonly breakdown: KeyspaceBreakdown;
 	readonly presetIds: readonly string[];
-	readonly rendererKind: 'webgpu' | 'svg';
-	readonly onRendererChange: (kind: 'webgpu' | 'svg') => void;
+	readonly preference: 'auto' | 'webgpu' | 'webgl' | 'canvas';
+	readonly onBackend: (backend: string) => void;
 	readonly selected: number | null;
 	readonly onSelectRotor: (index: number) => void;
 	readonly lidOpen: boolean;
@@ -51,8 +51,8 @@ export function FormMode(props: FormModeProps) {
 				selected={selected}
 				lidOpen={lidOpen}
 				onToggleLid={onToggleLid}
-				rendererKind={props.rendererKind}
-				onRendererChange={props.onRendererChange}
+				preference={props.preference}
+				onBackend={props.onBackend}
 			/>
 
 			<section class="panel panel--io" aria-labelledby="io-heading">

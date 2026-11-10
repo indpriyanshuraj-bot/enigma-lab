@@ -2,10 +2,10 @@ import { indexToSymbol, PRESETS, transmit, VERSION } from '@enigma-lab/core';
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
 import { FormMode } from './modes/form.js';
 import { ThreeDMode } from './modes/three-d-mode.js';
-import { detectRenderer } from './render/webgpu.js';
 import { CUSTOM_PRESET_ID, encodeHash, keyspaceFor, loadState, machineFor, nextLetter, rollKey, saveState, type LabState } from './state/store.js';
 import { applyTheme, loadPrefs, savePrefs, type Mode, type Prefs } from './state/prefs.js';
 import { Settings } from './ui/settings.js';
+import { InstallBanner } from './ui/install.js';
 
 const PRESET_IDS = [...Object.keys(PRESETS), CUSTOM_PRESET_ID];
 
@@ -17,14 +17,14 @@ function dailyKey(state: LabState) {
 export function App() {
 	const [state, setState] = useState<LabState>(() => loadState());
 	const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
-	const [renderer, setRenderer] = useState<'webgpu' | 'svg'>('svg');
-	const [rendererNote, setRendererNote] = useState('detecting');
+	const [formBackend, setFormBackend] = useState('detecting');
 	const [lit, setLit] = useState<string | null>(null);
 	const [selected, setSelected] = useState<number | null>(null);
 	const [lidOpen, setLidOpen] = useState(true);
 	const [messageKey, setMessageKey] = useState('QWE');
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [installable, setInstallable] = useState<{ prompt: () => Promise<void> } | null>(null);
+	const [backend, setBackend] = useState('detecting');
+	const [pendingPlug, setPendingPlug] = useState<string | null>(null);
 
 	const mode: Mode = prefs.mode;
 
@@ -45,7 +45,7 @@ export function App() {
 				return { indicator: '', body: '' };
 			}
 		})();
-		return { output, window: machine.window, rotors, reflector: machine.reflector.name, signal };
+		return { output, window: machine.window, rotors, reflector: machine.reflector.name, signal, alphabet: machine.alphabet };
 	}, [state, messageKey]);
 
 	const breakdown = useMemo(() => keyspaceFor(state), [state]);
@@ -63,24 +63,26 @@ export function App() {
 	}, [prefs]);
 
 	useEffect(() => {
-		void detectRenderer().then((report) => setRendererNote(report.reason));
-	}, []);
-
-	useEffect(() => {
 		if (!('serviceWorker' in navigator) || !globalThis.isSecureContext) return;
 		navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {
 			// Offline support is a bonus, never a requirement.
 		});
 	}, []);
 
-	useEffect(() => {
-		const onInstall = (event: Event) => {
-			event.preventDefault();
-			setInstallable({ prompt: async () => void (await (event as unknown as { prompt(): Promise<void> }).prompt()) });
-		};
-		globalThis.addEventListener('beforeinstallprompt', onInstall);
-		return () => globalThis.removeEventListener('beforeinstallprompt', onInstall);
-	}, []);
+	/** Tapping a socket twice cancels; tapping two different ones plugs them together. */
+	const plug = (letter: string) => {
+		if (!pendingPlug) {
+			setPendingPlug(letter);
+			return;
+		}
+		if (pendingPlug === letter) {
+			setPendingPlug(null);
+			return;
+		}
+		const existing = state.plugboard.filter((pair) => !pair.includes(letter) && !pair.includes(pendingPlug));
+		setState({ ...state, plugboard: [...existing, [pendingPlug, letter] as const] });
+		setPendingPlug(null);
+	};
 
 	const press = useCallback((letter: string) => {
 		setState((current) => ({ ...current, input: `${current.input}${letter}`.slice(0, 400) }));
@@ -179,11 +181,6 @@ export function App() {
 							3D
 						</button>
 					</div>
-					{installable ? (
-						<button type="button" class="button button--ghost" onClick={() => void installable.prompt()}>
-							Install
-						</button>
-					) : null}
 					<button type="button" class="button button--ghost" aria-haspopup="dialog" onClick={() => setSettingsOpen(true)}>
 						Settings
 					</button>
@@ -195,26 +192,35 @@ export function App() {
 					<FormMode
 						{...shared}
 						presetIds={PRESET_IDS}
-						rendererKind={renderer}
-						onRendererChange={setRenderer}
+						preference={prefs.renderer}
+						onBackend={setFormBackend}
 						messageKey={messageKey}
 						onMessageKey={setMessageKey}
 						onRollKey={() => setState(rollKey(state, Math.floor(Math.random() * 99999) + 1))}
 					/>
 				) : (
-					<ThreeDMode {...shared} motion={prefs.motion} />
+					<ThreeDMode
+						{...shared}
+						motion={prefs.motion}
+						preference={prefs.renderer}
+						onBackend={setBackend}
+						onPlug={plug}
+						pendingPlug={pendingPlug}
+					/>
 				)}
 			</main>
 
 			<footer class="footer">
 				<p>
-					<strong>{mode === '3d' ? 'Canvas 3D' : renderer === 'webgpu' ? 'WebGPU' : 'SVG'}</strong> · core v{VERSION} · {rendererNote}
+					<strong>{mode === '3d' ? backend : formBackend}</strong> · core v{VERSION}
 				</p>
 				<p>
 					Nothing leaves your device; there is no server to send it to. The machine lives in the URL, your preferences stay
 					here.
 				</p>
 			</footer>
+
+			<InstallBanner />
 
 			<Settings prefs={prefs} onChange={setPrefs} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 		</div>

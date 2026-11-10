@@ -12,6 +12,7 @@ export interface ThreeDModeProps {
 		readonly window: string;
 		readonly rotors: readonly SceneRotor[];
 		readonly reflector: string;
+		readonly alphabet: string;
 	};
 	readonly breakdown: KeyspaceBreakdown;
 	readonly selected: number | null;
@@ -22,15 +23,21 @@ export interface ThreeDModeProps {
 	readonly lit: string | null;
 	readonly onPress: (letter: string) => void;
 	readonly onBackspace: () => void;
+	readonly onPlug: (letter: string) => void;
+	readonly preference: 'auto' | 'webgpu' | 'webgl' | 'canvas';
+	readonly onBackend: (backend: string) => void;
+	readonly pendingPlug: string | null;
 }
 
 /**
- * The 3D interface. Same machine, same state, same output as the form — only the
- * way you touch it differs. The readouts stay in HTML so the result is always
- * selectable, copyable and announced, whatever the canvas is doing.
+ * The 3D interface: the whole machine, as one object.
+ *
+ * Keys, rotors and plugboard sockets are live in the model; the readouts stay in
+ * HTML, so the result is always selectable, copyable and announced.
  */
 export function ThreeDMode(props: ThreeDModeProps) {
 	const { state, run, selected } = props;
+	const plugged = state.plugboard.flat();
 	return (
 		<>
 			<ThreeD
@@ -38,11 +45,17 @@ export function ThreeDMode(props: ThreeDModeProps) {
 				rings={run.rotors.map((rotor) => rotor.ring)}
 				ids={run.rotors.map((rotor) => rotor.id)}
 				reflector={run.reflector}
+				alphabet={run.alphabet}
 				lidOpen={props.lidOpen}
-				onToggleLid={props.onToggleLid}
-				onSelectRotor={props.onSelectRotor}
-				selected={selected}
+				lit={props.lit}
+				plugged={plugged}
 				motion={props.motion}
+				preference={props.preference}
+				onToggleLid={props.onToggleLid}
+				onRotor={props.onSelectRotor}
+				onKey={props.onPress}
+				onPlug={props.onPlug}
+				onBackend={props.onBackend}
 			/>
 
 			<div class="readout" aria-live="polite">
@@ -60,6 +73,12 @@ export function ThreeDMode(props: ThreeDModeProps) {
 					<small>{props.breakdown.bits.toFixed(1)} bits</small>
 				</div>
 			</div>
+
+			{props.pendingPlug ? (
+				<p class="hint" role="status">
+					Plug <strong>{props.pendingPlug}</strong> into another socket — or tap it again to cancel.
+				</p>
+			) : null}
 
 			{selected !== null ? (
 				<div class="rotor-actions" role="group" aria-label={`Rotor ${selected + 1}`}>
@@ -101,7 +120,7 @@ export function ThreeDMode(props: ThreeDModeProps) {
 					</button>
 				</div>
 			) : (
-				<p class="hint">Tap a rotor to work it, or type a letter to send one.</p>
+				<p class="hint">Tap a rotor to work it, a key to send a letter, a socket to plug a cable.</p>
 			)}
 
 			<Keyboard onKey={props.onPress} onBackspace={props.onBackspace} lit={props.lit} />
