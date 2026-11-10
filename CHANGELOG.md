@@ -4,6 +4,27 @@ All notable changes to the site are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning, and each tag is a deployable snapshot of `dist/`.
 
+## [0.5.0] - 2026-11-10
+
+### Changed
+
+- The interface is a calculator, not a document. The readout sits at the very top of the
+  screen, the keys take the height that is left, and every setting moved into a sheet that
+  slides up from the bottom. Nothing scrolls, on any phone.
+- The machine has its own materials. A walnut-dark case, a brass reflector, blue, green and
+  ochre wheels, ivory keys, amber lamps and brass sockets — the object keeps its colours
+  whatever theme the page is in.
+- The 3D view lost its duplicate readouts and its second keyboard: the machine is the
+  keyboard.
+
+### Fixed
+
+- The first tap on a phone was swallowed: the page was a few pixels taller than the
+  viewport, so the browser scrolled during the gesture and the tap landed somewhere else.
+  The shell is now locked to the viewport.
+- The install banner could appear mid-gesture and move the key out from under the finger;
+  it now waits until a gesture has finished.
+
 ## [0.4.0] - 2026-11-10
 
 ### Added
